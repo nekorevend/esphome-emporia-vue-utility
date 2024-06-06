@@ -19,7 +19,7 @@ void EmporiaVueUtility::setup() {
 }
 
 void EmporiaVueUtility::update() {
-    send_meter_request();
+    // send_meter_request();
 }
 
 void EmporiaVueUtility::loop() {
@@ -33,17 +33,17 @@ void EmporiaVueUtility::loop() {
     msg_len = read_msg();
     now = ::time(&now);
 
-    /* sanity checks! */
-    if (next_meter_request >
-        now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
-        ESP_LOGD(TAG,
-                "Time jumped back (%lld > %lld + %lld); resetting",
-                (long long) next_meter_request,
-                (long long) now,
-                (long long) (INITIAL_STARTUP_DELAY +
-                            METER_REJOIN_INTERVAL));
-        next_meter_request = next_meter_join = 0;
-    }
+    // /* sanity checks! */
+    // if (next_meter_request >
+    //     now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
+    //     ESP_LOGD(TAG,
+    //             "Time jumped back (%lld > %lld + %lld); resetting",
+    //             (long long) next_meter_request,
+    //             (long long) now,
+    //             (long long) (INITIAL_STARTUP_DELAY +
+    //                         METER_REJOIN_INTERVAL));
+    //     next_meter_request = next_meter_join = 0;
+    // }
 
     if (msg_len != 0) {
 
@@ -71,7 +71,7 @@ void EmporiaVueUtility::loop() {
                 handle_resp_meter_join();
                 led_wifi(true);
                 if (startup_step == 3) {
-                    // send_meter_request();
+                    send_meter_request();
                     startup_step++;
                 }
                 break;

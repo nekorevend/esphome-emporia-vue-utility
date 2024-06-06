@@ -129,6 +129,12 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
     uint16_t cost_unit = 0;
 
     void set_update_interval(uint32_t update_interval);
+    void set_power_sensor(sensor::Sensor *sensor) { power_sensor_ = sensor; }
+    void set_power_export_sensor(sensor::Sensor *sensor) { power_export_sensor_ = sensor; }
+    void set_power_import_sensor(sensor::Sensor *sensor) { power_import_sensor_ = sensor; }
+    void set_energy_sensor(sensor::Sensor *sensor) { energy_sensor_ = sensor; }
+    void set_energy_export_sensor(sensor::Sensor *sensor) { energy_export_sensor_ = sensor; }
+    void set_energy_import_sensor(sensor::Sensor *sensor) { energy_import_sensor_ = sensor; }
     void setup() override;
     void update() override;
     void loop() override;
@@ -424,12 +430,15 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
             }
         }
 
-        Wh_consumed->publish_state(float(consumed));
-        Wh_returned->publish_state(float(returned));
-        Wh_net->publish_state(watt_hours);
-        kWh_consumed->publish_state(float(consumed) / 1000.0);
-        kWh_returned->publish_state(float(returned) / 1000.0);
-        kWh_net->publish_state(watt_hours / 1000.0);
+        if (energy_import_sensor_ != nullptr) {
+            energy_import_sensor_->publish_state(float(consumed));
+        }
+        if (energy_export_sensor_ != nullptr) {
+            energy_export_sensor_->publish_state(float(returned));
+        }
+        if (energy_sensor_ != nullptr) {
+            energy_sensor_->publish_state(watt_hours);
+        }
 
         return(watt_hours);
     }
@@ -469,14 +478,17 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
             return(0);
         }
 
-        Wh_consumed->publish_state(float(consumed));
-        Wh_returned->publish_state(float(returned));
-        kWh_consumed->publish_state(float(consumed) / 1000.0);
-        kWh_returned->publish_state(float(returned) / 1000.0);
-
         net = consumed - returned;
-        Wh_net->publish_state(float(net));
-        kWh_net->publish_state(float(net) / 1000.0);
+
+        if (energy_import_sensor_ != nullptr) {
+            energy_import_sensor_->publish_state(float(consumed));
+        }
+        if (energy_export_sensor_ != nullptr) {
+            energy_export_sensor_->publish_state(float(returned));
+        }
+        if (energy_sensor_ != nullptr) {
+            energy_sensor_->publish_state(net);
+        }
 
         prev_consumed = consumed;
         prev_returned = returned;
@@ -524,13 +536,23 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
             ESP_LOGE(TAG, "Unreasonable watts value %f", watts);
             last_reading_has_error = 1;
         } else {
-            W->publish_state(watts);
+            if (power_sensor_ != nullptr) {
+                power_sensor_->publish_state(watts);
+            }
             if (watts > 0) {
-                W_consumed->publish_state(watts);
-                W_returned->publish_state(0);
+                if (power_import_sensor_ != nullptr) {
+                    power_import_sensor_->publish_state(watts);
+                }
+                if (power_export_sensor_ != nullptr) {
+                    power_export_sensor_->publish_state(0);
+                }
             } else {
-                W_consumed->publish_state(0);
-                W_returned->publish_state(-watts);
+                if (power_import_sensor_ != nullptr) {
+                    power_import_sensor_->publish_state(0);
+                }
+                if (power_export_sensor_ != nullptr) {
+                    power_export_sensor_->publish_state(-watts);
+                }
             }
         }
         return(watts);
@@ -550,13 +572,23 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
             ESP_LOGE(TAG, "Unreasonable watts value %d", watts);
             last_reading_has_error = 1;
         } else {
-            W->publish_state(watts);
+            if (power_sensor_ != nullptr) {
+                power_sensor_->publish_state(watts);
+            }
             if (watts > 0) {
-                W_consumed->publish_state(watts);
-                W_returned->publish_state(0);
+                if (power_import_sensor_ != nullptr) {
+                    power_import_sensor_->publish_state(watts);
+                }
+                if (power_export_sensor_ != nullptr) {
+                    power_export_sensor_->publish_state(0);
+                }
             } else {
-                W_consumed->publish_state(0);
-                W_returned->publish_state(-watts);
+                if (power_import_sensor_ != nullptr) {
+                    power_import_sensor_->publish_state(0);
+                }
+                if (power_export_sensor_ != nullptr) {
+                    power_export_sensor_->publish_state(-watts);
+                }
             }
         }
         return(watts);
@@ -671,15 +703,12 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
     }
   private:
     uint32_t update_interval_;
-    Sensor *kWh_net      = new Sensor();
-    Sensor *kWh_consumed = new Sensor();
-    Sensor *kWh_returned = new Sensor();
-    Sensor *Wh_net       = new Sensor();
-    Sensor *Wh_consumed  = new Sensor();
-    Sensor *Wh_returned  = new Sensor();
-    Sensor *W            = new Sensor();
-    Sensor *W_consumed   = new Sensor();
-    Sensor *W_returned   = new Sensor();
+    sensor::Sensor *power_sensor_{nullptr};
+    sensor::Sensor *power_export_sensor_{nullptr};
+    sensor::Sensor *power_import_sensor_{nullptr};
+    sensor::Sensor *energy_sensor_{nullptr};
+    sensor::Sensor *energy_export_sensor_{nullptr};
+    sensor::Sensor *energy_import_sensor_{nullptr};
 };
 
 }  // namespace emporia_vue_utility
