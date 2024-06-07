@@ -131,6 +131,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   uint16_t cost_unit = 0;
 
   void set_update_interval(uint32_t update_interval) {
+    PollingComponent::set_update_interval(update_interval);
     update_interval_ = update_interval / 1000;
   }
   void set_power_sensor(sensor::Sensor *sensor) { power_sensor_ = sensor; }

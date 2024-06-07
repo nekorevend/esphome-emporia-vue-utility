@@ -16,11 +16,7 @@ void EmporiaVueUtility::setup() {
 }
 
 void EmporiaVueUtility::update() {
-  // This seems to be called incessantly instead of at the set update
-  // interval...
-
-  //ESP_LOGD(TAG, "Got update call with an instructed interval of
-  // %d sec", this->update_interval_);
+  // TODO: Use this to return value updates.
 }
 
 void EmporiaVueUtility::loop() {
@@ -160,6 +156,7 @@ void EmporiaVueUtility::dump_config() {
   ESP_LOGCONFIG(TAG, "  MGM Firmware Version: %d", this->mgm_firmware_ver);
   ESP_LOGCONFIG(TAG, "  MGM MAC Address:  %s", this->mgm_mac_address);
   ESP_LOGCONFIG(TAG, "  MGM Install Code: %s (secret)", this->mgm_install_code);
+  LOG_UPDATE_INTERVAL(this);
 }
 }  // namespace emporia_vue_utility
 }  // namespace esphome
