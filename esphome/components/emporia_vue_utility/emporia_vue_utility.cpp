@@ -156,7 +156,10 @@ void EmporiaVueUtility::loop() {
 }
 
 void EmporiaVueUtility::dump_config() {
-  ESP_LOGCONFIG(TAG, "Emporia Vue Utility config dump WIP");
+  ESP_LOGCONFIG(TAG, "Emporia Vue Utility Connect");
+  ESP_LOGCONFIG(TAG, "  MGM Firmware Version: %d", this->mgm_firmware_ver);
+  ESP_LOGCONFIG(TAG, "  MGM MAC Address:  %s", this->mgm_mac_address);
+  ESP_LOGCONFIG(TAG, "  MGM Install Code: %s (secret)", this->mgm_install_code);
 }
 }  // namespace emporia_vue_utility
 }  // namespace esphome
