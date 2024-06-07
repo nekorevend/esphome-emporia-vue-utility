@@ -42,7 +42,7 @@ static const char *TAG = "emporia_vue_utility";
 namespace esphome {
 namespace emporia_vue_utility {
 
-class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public uart::UARTDevice {
+class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   public:
     /**
      * Format known from MGM Firmware version 2.
@@ -128,7 +128,7 @@ class EmporiaVueUtility : public sensor::Sensor, public PollingComponent, public
     // The most recent cost unit
     uint16_t cost_unit = 0;
 
-    void set_update_interval(uint32_t update_interval);
+    void set_update_interval(uint32_t update_interval) { update_interval_ = update_interval / 1000; }
     void set_power_sensor(sensor::Sensor *sensor) { power_sensor_ = sensor; }
     void set_power_export_sensor(sensor::Sensor *sensor) { power_export_sensor_ = sensor; }
     void set_power_import_sensor(sensor::Sensor *sensor) { power_import_sensor_ = sensor; }

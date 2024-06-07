@@ -4,10 +4,6 @@
 namespace esphome {
 namespace emporia_vue_utility {
 
-void EmporiaVueUtility::set_update_interval(uint32_t update_interval) {
-    this->update_interval_ = update_interval;
-}        
-
 void EmporiaVueUtility::setup() {
 #if USE_LED_PINS
     pinMode(LED_PIN_LINK, OUTPUT);
@@ -19,12 +15,14 @@ void EmporiaVueUtility::setup() {
 }
 
 void EmporiaVueUtility::update() {
-    // send_meter_request();
+    // This seems to be called incessantly instead of at the set update interval...
+    // ESP_LOGD(TAG, "Got update call with an instructed interval of %d sec", this->update_interval_);
 }
 
 void EmporiaVueUtility::loop() {
     static time_t next_meter_request;
     static time_t next_meter_join;
+    static time_t next_version_request = 0;
     static uint8_t startup_step;
     char msg_type = 0;
     size_t msg_len = 0;
@@ -33,20 +31,19 @@ void EmporiaVueUtility::loop() {
     msg_len = read_msg();
     now = ::time(&now);
 
-    // /* sanity checks! */
-    // if (next_meter_request >
-    //     now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
-    //     ESP_LOGD(TAG,
-    //             "Time jumped back (%lld > %lld + %lld); resetting",
-    //             (long long) next_meter_request,
-    //             (long long) now,
-    //             (long long) (INITIAL_STARTUP_DELAY +
-    //                         METER_REJOIN_INTERVAL));
-    //     next_meter_request = next_meter_join = 0;
-    // }
+    /* sanity checks! */
+    if (next_meter_request >
+        now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
+        ESP_LOGD(TAG,
+                "Time jumped back (%lld > %lld + %lld); resetting",
+                (long long) next_meter_request,
+                (long long) now,
+                (long long) (INITIAL_STARTUP_DELAY +
+                            METER_REJOIN_INTERVAL));
+        next_meter_request = next_meter_join = 0;
+    }
 
     if (msg_len != 0) {
-
         msg_type = input_buffer.data[2];
 
         switch (msg_type) {
@@ -117,10 +114,11 @@ void EmporiaVueUtility::loop() {
         pos = 0;
     }
 
-    if (mgm_firmware_ver < 1) {
+    if (mgm_firmware_ver < 1 && now >= next_version_request) {
         // Something's wrong, do the startup sequence again.
         startup_step = 0;
         send_version_req();
+        next_version_request = now + 1; // Wait a second.
     }
 
     if (now >= next_meter_request) {
@@ -150,7 +148,7 @@ void EmporiaVueUtility::loop() {
 }
 
 void EmporiaVueUtility::dump_config() {
-    ESP_LOGCONFIG(TAG, "Stubbed Emporia Vue Utility");
+    ESP_LOGCONFIG(TAG, "Emporia Vue Utility config dump WIP");
 }
 }  // namespace emporia_vue_utility
 }  // namespace esphome
