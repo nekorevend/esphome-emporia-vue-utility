@@ -17,7 +17,9 @@ void EmporiaVueUtility::setup() {
 
 void EmporiaVueUtility::update() {
   // This seems to be called incessantly instead of at the set update
-  // interval... ESP_LOGD(TAG, "Got update call with an instructed interval of
+  // interval...
+
+  //ESP_LOGD(TAG, "Got update call with an instructed interval of
   // %d sec", this->update_interval_);
 }
 
