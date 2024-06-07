@@ -10,7 +10,7 @@ from esphome.const import (
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_ENERGY,
     STATE_CLASS_MEASUREMENT,
-    STATE_CLASS_TOTAL_INCREASING
+    STATE_CLASS_TOTAL_INCREASING,
 )
 
 DEPENDENCIES = ["uart"]
@@ -29,8 +29,10 @@ ENERGY_SENSOR_TYPES = {
 
 ALL_SENSOR_TYPES = {**POWER_SENSOR_TYPES, **ENERGY_SENSOR_TYPES}
 
-emporia_vue_utility_ns = cg.esphome_ns.namespace('emporia_vue_utility')
-EmporiaVueUtility = emporia_vue_utility_ns.class_('EmporiaVueUtility', cg.PollingComponent, uart.UARTDevice)
+emporia_vue_utility_ns = cg.esphome_ns.namespace("emporia_vue_utility")
+EmporiaVueUtility = emporia_vue_utility_ns.class_(
+    "EmporiaVueUtility", cg.PollingComponent, uart.UARTDevice
+)
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
@@ -53,12 +55,13 @@ CONFIG_SCHEMA = cv.All(
                     accuracy_decimals=0,
                 )
                 for name in ENERGY_SENSOR_TYPES
-            }
+            },
         }
     )
-    .extend(cv.polling_component_schema('30s'))
+    .extend(cv.polling_component_schema("30s"))
     .extend(uart.UART_DEVICE_SCHEMA)
 )
+
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
