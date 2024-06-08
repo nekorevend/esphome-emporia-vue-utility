@@ -4,9 +4,6 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
 
-// Extra meter reading response debugging
-#define DEBUG_VUE_RESPONSE true
-
 // If the instant watts being consumed meter reading is outside of these ranges,
 // the sample will be ignored which helps prevent garbage data from polluting
 // home assistant graphs.  Note this is the instant watts value, not the
@@ -83,7 +80,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     uint32_t import_wh;  // Payload Bytes 7 to 10
     byte unknown11[6];   // Payload Bytes 11 to 16
     uint32_t export_wh;  // Payload Bytes 17 to 20
-    byte unknown21[19];  // Payload Bytes 21 to 39
+    byte unknown21[13];  // Payload Bytes 21 to 33
+    uint16_t cost_unit;  // Payload Bytes 34 to 35
+    byte unknown36[4];   // Payload Bytes 36 to 39
     uint32_t watts;  // Payload Bytes 40 to 43 : Starts with 0x2A, only use the
                      // last 24 bits.
   } __attribute__((packed));
@@ -133,6 +132,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   // The most recent cost unit
   uint16_t cost_unit = 0;
 
+  void set_debug(bool enable) { debug_ = enable; }
   void set_update_interval(uint32_t update_interval) {
     PollingComponent::set_update_interval(update_interval);
     update_interval_ = update_interval / 1000;
@@ -313,8 +313,8 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       watts = parse_meter_watts_v2(mr2);
 
       // Extra debugging of non-zero bytes, only on first packet or if
-      // DEBUG_VUE_RESPONSE is true
-      if ((DEBUG_VUE_RESPONSE) || (last_meter_reading == 0)) {
+      // debug_ is true
+      if ((debug_) || (last_meter_reading == 0)) {
         ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
         ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
         ESP_LOGD(TAG, "Meter Flags: %02x %02x", mr2->maybe_flags[0],
@@ -348,8 +348,33 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
         return;
       }
 
+      cost_unit = mr7->cost_unit;
       watts = parse_meter_watts_v7(mr7->watts);
       watt_hours = parse_meter_watt_hours_v7(mr7);
+
+      // Extra debugging of non-zero bytes, only on first packet or if
+      // debug_ is true
+      if ((debug_) || (last_meter_reading == 0)) {
+        ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
+        ESP_LOGD(TAG, "Meter Energy Import Flags: %08x", mr7->import_wh);
+        ESP_LOGD(TAG, "Meter Energy Export Flags: %08x", mr7->export_wh);
+        ESP_LOGD(TAG, "Meter Power Flags: %08x", mr7->watts);
+        ESP_LOGD(TAG, "Meter Import Energy: %.3fkWh", mr7->import_wh / 1000.0);
+        ESP_LOGD(TAG, "Meter Export Energy: %.3fkWh", mr7->export_wh / 1000.0);
+        ESP_LOGD(TAG, "Meter Net Energy: %.3fkWh", watt_hours / 1000.0);
+        ESP_LOGD(TAG, "Meter Power:  %3.0fW", watts);
+
+        for (int x = 1; x < pos / 4; x++) {
+          int y = x * 4;
+          if ((input_buffer.data[y]) || (input_buffer.data[y + 1]) ||
+              (input_buffer.data[y + 2]) || (input_buffer.data[y + 3])) {
+            ESP_LOGD(
+                TAG, "Meter Response Bytes %3d to %3d: %02x %02x %02x %02x",
+                y - 4, y - 1, input_buffer.data[y], input_buffer.data[y + 1],
+                input_buffer.data[y + 2], input_buffer.data[y + 3]);
+          }
+        }
+      }
     }
   }
 
@@ -690,8 +715,11 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     ESP_LOGI(TAG,
              "Also confirm that the above mac address & install code match");
     ESP_LOGI(TAG, "what is printed on your device.");
-    ESP_LOGE(TAG, "You can also file a bug at");
-    ESP_LOGE(TAG, "  https://forms.gle/duMdU2i7wWHdbK5TA");
+    ESP_LOGE(TAG, "You can also try asking for help at");
+    ESP_LOGE(TAG,
+             "  "
+             "https://community.home-assistant.io/t/"
+             "emporia-vue-utility-connect/378347");
     write_array(msg, sizeof(msg));
     led_wifi(false);
   }
@@ -728,6 +756,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   }
 
  private:
+  bool debug_ = false;
   uint32_t update_interval_;
   sensor::Sensor *power_sensor_{nullptr};
   sensor::Sensor *power_export_sensor_{nullptr};

@@ -2,6 +2,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import uart, sensor
 from esphome.const import (
+    CONF_DEBUG,
     CONF_ID,
     CONF_POWER,
     CONF_ENERGY,
@@ -56,6 +57,7 @@ CONFIG_SCHEMA = cv.All(
                 )
                 for name in ENERGY_SENSOR_TYPES
             },
+            cv.Optional(CONF_DEBUG, default=False): cv.boolean,
         }
     )
     .extend(cv.polling_component_schema("30s"))
@@ -72,3 +74,6 @@ async def to_code(config):
         if key in config:
             sens = await sensor.new_sensor(config[key])
             cg.add(getattr(var, funcName)(sens))
+
+    if CONF_DEBUG in config:
+        cg.add(var.set_debug(config[CONF_DEBUG]))
