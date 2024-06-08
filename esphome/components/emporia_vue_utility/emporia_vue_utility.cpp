@@ -138,9 +138,10 @@ void EmporiaVueUtility::loop() {
       send_install_code_req();
     else if (startup_step == 3)
       send_meter_join();
-    else
+    else {
       ready_to_read_meter_ = true;
-    next_expected_meter_request = now + update_interval_;
+      next_expected_meter_request = now + update_interval_;
+    }
   }
 }
 
