@@ -16,28 +16,32 @@ void EmporiaVueUtility::setup() {
 }
 
 void EmporiaVueUtility::update() {
-  // TODO: Use this to return value updates.
+  if (ready_to_read_meter_) {
+    send_meter_request();
+  }
 }
 
 void EmporiaVueUtility::loop() {
-  static time_t next_meter_request;
-  static time_t next_meter_join;
+  static const time_t delayed_start_time =
+      ::time(nullptr) + INITIAL_STARTUP_DELAY;
+  static time_t next_expected_meter_request = 0;
+  static time_t next_meter_join = delayed_start_time + METER_REJOIN_INTERVAL;
   static time_t next_version_request = 0;
-  static uint8_t startup_step;
+  static uint8_t startup_step = 0;
   char msg_type = 0;
   size_t msg_len = 0;
-  byte inb;
 
   msg_len = read_msg();
-  now = ::time(&now);
+  now = ::time(nullptr);
 
   /* sanity checks! */
-  if (next_meter_request >
+  if (next_expected_meter_request >
       now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
     ESP_LOGD(TAG, "Time jumped back (%lld > %lld + %lld); resetting",
-             (long long)next_meter_request, (long long)now,
+             (long long)next_expected_meter_request, (long long)now,
              (long long)(INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL));
-    next_meter_request = next_meter_join = 0;
+    next_meter_join = 0;
+    next_expected_meter_request = now + update_interval_;
   }
 
   if (msg_len != 0) {
@@ -76,7 +80,6 @@ void EmporiaVueUtility::loop() {
           if (startup_step == 0) {
             startup_step++;
             send_mac_req();
-            next_meter_request = now + update_interval_;
           }
         }
         break;
@@ -86,7 +89,6 @@ void EmporiaVueUtility::loop() {
           if (startup_step == 1) {
             startup_step++;
             send_install_code_req();
-            next_meter_request = now + update_interval_;
           }
         }
         break;
@@ -95,8 +97,6 @@ void EmporiaVueUtility::loop() {
           led_wifi(true);
           if (startup_step == 2) {
             startup_step++;
-            send_meter_request();
-            next_meter_request = now + update_interval_;
           }
         }
         break;
@@ -116,21 +116,13 @@ void EmporiaVueUtility::loop() {
   if (mgm_firmware_ver < 1 && now >= next_version_request) {
     // Something's wrong, do the startup sequence again.
     startup_step = 0;
+    ready_to_read_meter_ = false;
     send_version_req();
-    next_version_request = now + 1;  // Wait a second.
+    // Throttle this just in case.
+    next_version_request = now + MGM_FIRMWARE_REQUEST_INTERVAL;
   }
 
-  if (now >= next_meter_request) {
-    // Handle initial startup delay
-    if (next_meter_request == 0) {
-      next_meter_request = now + INITIAL_STARTUP_DELAY;
-      next_meter_join = next_meter_request + METER_REJOIN_INTERVAL;
-      return;
-    }
-
-    // Schedule the next MGM message
-    next_meter_request = now + update_interval_;
-
+  if (now >= delayed_start_time) {
     if (now > next_meter_join) {
       startup_step = 9;  // Cancel startup messages
       send_meter_join();
@@ -147,7 +139,8 @@ void EmporiaVueUtility::loop() {
     else if (startup_step == 3)
       send_meter_join();
     else
-      send_meter_request();
+      ready_to_read_meter_ = true;
+    next_expected_meter_request = now + update_interval_;
   }
 }
 

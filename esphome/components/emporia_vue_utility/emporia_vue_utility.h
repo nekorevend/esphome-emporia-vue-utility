@@ -27,6 +27,9 @@
 // been returning readings
 #define METER_REJOIN_INTERVAL 30
 
+// How often to attempt to re-request the MGM firmware version.
+#define MGM_FIRMWARE_REQUEST_INTERVAL 3
+
 // On first startup, how long before trying to start to talk to meter
 #define INITIAL_STARTUP_DELAY 10
 
@@ -732,6 +735,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   sensor::Sensor *energy_sensor_{nullptr};
   sensor::Sensor *energy_export_sensor_{nullptr};
   sensor::Sensor *energy_import_sensor_{nullptr};
+  bool ready_to_read_meter_ = false;
 };
 
 }  // namespace emporia_vue_utility
