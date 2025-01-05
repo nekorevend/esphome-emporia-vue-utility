@@ -24,27 +24,17 @@ void EmporiaVueUtility::update() {
 }
 
 void EmporiaVueUtility::loop() {
-  static const time_t delayed_start_time =
-      ::time(nullptr) + INITIAL_STARTUP_DELAY;
-  static time_t next_expected_meter_request = 0;
-  static time_t next_meter_join = delayed_start_time + METER_REJOIN_INTERVAL;
-  static time_t next_version_request = 0;
+  static const steady_time_point delayed_start_time =
+    steady_clock::now() + INITIAL_STARTUP_DELAY;
+  static steady_time_point next_expected_meter_request = min_steady_time_point;
+  static steady_time_point next_meter_join = delayed_start_time + METER_REJOIN_INTERVAL;
+  static steady_time_point next_version_request = min_steady_time_point;
   static uint8_t startup_step = 0;
   char msg_type = 0;
   size_t msg_len = 0;
 
   msg_len = read_msg();
-  now = ::time(nullptr);
-
-  /* sanity checks! */
-  if (next_expected_meter_request >
-      now + (INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL)) {
-    ESP_LOGD(TAG, "Time jumped back (%lld > %lld + %lld); resetting",
-             (long long)next_expected_meter_request, (long long)now,
-             (long long)(INITIAL_STARTUP_DELAY + METER_REJOIN_INTERVAL));
-    next_meter_join = 0;
-    next_expected_meter_request = now + update_interval_;
-  }
+  now = steady_clock::now();
 
   if (msg_len != 0) {
     msg_type = input_buffer.data[2];
@@ -52,7 +42,7 @@ void EmporiaVueUtility::loop() {
     switch (msg_type) {
       case 'r':  // Meter reading
         led_link(true);
-        if (now < last_meter_reading + int(update_interval_ / 4)) {
+        if (now < (last_meter_reading + update_interval_ / 4)) {
           // Sometimes a duplicate message is sent in quick succession.
           // Ignoring the duplicate.
           ESP_LOGD(TAG, "Got extra message %lds after the previous message.",

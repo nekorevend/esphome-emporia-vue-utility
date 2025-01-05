@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include "driver/gpio.h"
 
 #include "esphome/components/sensor/sensor.h"
@@ -24,13 +26,13 @@
 
 // How often to attempt to re-join the meter when it hasn't
 // been returning readings
-#define METER_REJOIN_INTERVAL 30
+#define METER_REJOIN_INTERVAL std::chrono::seconds(30)
 
 // How often to attempt to re-request the MGM firmware version.
-#define MGM_FIRMWARE_REQUEST_INTERVAL 3
+#define MGM_FIRMWARE_REQUEST_INTERVAL std::chrono::seconds(3)
 
 // On first startup, how long before trying to start to talk to meter
-#define INITIAL_STARTUP_DELAY 10
+#define INITIAL_STARTUP_DELAY std::chrono::seconds(10)
 
 // Should this code manage the "wifi" and "link" LEDs?
 // set to false if you want manually manage them elsewhere
@@ -126,9 +128,14 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   uint16_t pos = 0;
   uint16_t data_len;
 
-  time_t last_meter_reading = 0;
+  using steady_time_point = std::chrono::time_point<std::chrono::steady_clock>;
+  static constexpr steady_time_point min_steady_time_point =
+    steady_time_point::min();
+  using steady_clock = std::chrono::steady_clock;
+
+  steady_time_point last_meter_reading = min_steady_time_point;
   bool last_reading_has_error;
-  time_t now;
+  steady_time_point now;
 
   // The most recent meter divisor, meter reading payload V2 byte 47
   uint8_t meter_div = 0;
@@ -139,7 +146,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   void set_debug(bool enable) { debug_ = enable; }
   void set_update_interval(uint32_t update_interval) {
     PollingComponent::set_update_interval(update_interval);
-    update_interval_ = update_interval / 1000;
+    update_interval_ = std::chrono::milliseconds(update_interval);
   }
   void set_power_sensor(sensor::Sensor *sensor) { power_sensor_ = sensor; }
   void set_power_export_sensor(sensor::Sensor *sensor) {
@@ -311,7 +318,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
 
       // Extra debugging of non-zero bytes, only on first packet or if
       // debug_ is true
-      if ((debug_) || (last_meter_reading == 0)) {
+      if ((debug_) || (last_meter_reading == min_steady_time_point)) {
         ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
         ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
         ESP_LOGD(TAG, "Meter Flags: %02x %02x", mr2->maybe_flags[0],
@@ -356,7 +363,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
 
       // Extra debugging of non-zero bytes, only on first packet or if
       // debug_ is true
-      if ((debug_) || (last_meter_reading == 0)) {
+      if ((debug_) || (last_meter_reading == min_steady_time_point)) {
         ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
         ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
         ESP_LOGD(TAG, "Meter Energy Import Flags: %08x", mr7->import_wh);
@@ -777,7 +784,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
 
  private:
   bool debug_ = false;
-  uint32_t update_interval_;
+  steady_clock::duration update_interval_;
   sensor::Sensor *power_sensor_{nullptr};
   sensor::Sensor *power_export_sensor_{nullptr};
   sensor::Sensor *power_import_sensor_{nullptr};
