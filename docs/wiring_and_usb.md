@@ -77,7 +77,6 @@ Flashing tools (like `esptool`, used by ESPHome) do not have “EN/IO0” pins. 
 
 On some USB-serial adapters, those labels or polarities are effectively flipped. That’s why you’ll sometimes need to swap the connections.
 
-
 Many ESP32 dev boards (NodeMCU/WROOM devkits) hide this logic behind transistors/inverters, so you never think about it. **Bare USB-TTL dongles expose raw DTR/RTS**, where names and polarity are not standardized.
 - **Label drift:** Some boards label the header “RTS” where the chip is actually driven like DTR (or vice-versa).
 - **Polarity/inversion:** CH340, CP210x, FTDI, etc. often invert DTR/RTS differently. A vendor may “fix” this on the PCB without changing the silkscreen names.
@@ -104,5 +103,5 @@ Those all mean EN/IO0 aren’t being driven with the expected timing and polarit
 
 ### Why `--before usb_reset` sometimes works
 
-`--before usb_reset` avoids DTR/RTS entirely by bouncing the USB device. That can momentarily create the right conditions for the bootloader, but it’s crude and unreliable.  It also explains why some people need to manually unplug/replug after flashing. Fixing EN/IO0 mapping makes this unnecessary.
+The underlying `esptool` has a `--before usb_reset` option, which can work. It avoids DTR/RTS entirely by bouncing the USB device. That can momentarily create the right conditions for the bootloader, but it’s crude and unreliable. It also explains why some people need to manually unplug/replug after flashing. Fixing EN/IO0 mapping makes this unnecessary.
 

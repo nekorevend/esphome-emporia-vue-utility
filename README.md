@@ -48,9 +48,10 @@ Need help?
 Note: There is a **pairing process**. It is advisable to pair the Vue with your utility meter using the stock firmware and the Emporia app first.
 
 **2. Hardware**
-- **Emporia Vue Utility Connect** — purchase from [Emporia’s store](https://shop.emporiaenergy.com/products/utility-connect).  
+- **Emporia Vue Utility Connect** — purchase from [Emporia’s store](https://shop.emporiaenergy.com/products/utility-connect).
 - **USB-to-Serial adapter** — required for initial flashing.  See: [Wiring and USB adapter](docs/wiring_and_usb.md)
 - **Basic wiring hardware and skills** — you will need to open the Vue and connect to a row of through-hole pads.  See: [Wiring and USB adapter](docs/wiring_and_usb.md)
+- USB type A Power Supply **(optional)** - some Emporia USB power supplies have failed, which can appear like the device is powered but not working.  You may want to use something else.
 
 **3. Software**
 - **ESPHome** — the toolchain to build the firmware and flash it onto the Vue.  There are options.  See: [Installing ESPHome](docs/installing_esphome.md)
@@ -70,7 +71,7 @@ Let's say you flash your Vue device and it's working, but later your smart meter
 
 So should you flash the Vue with this firmware as soon as you receive it?  This is not advised.  **It is better to pair it with stock firmware** and use the Emporia App to confirm it is working.  This is the supported way to do so, and if you have any problems you can get the support of Emporia.
 
-**Note:** The Vue device needs to wirelessly talk to your meter, and your Wi-Fi at the same time to properly function.  So it needs to be located within range of both, and it is best to work in such a location.  This is important whenever you expect the device to be working (pairing the device, and testing it after flashing).
+**Note:** The Vue device needs to wirelessly talk to your meter and your Wi-Fi at the same time to properly function.  So it needs to be located within range of both, and it is best to work in such a location.  This is important whenever you expect the device to be working (pairing the device, and testing it after flashing).
 
 
 ----
@@ -105,7 +106,7 @@ Pick one of the [example YAML files](example_yaml/) in this project as a startin
 
 In any case, you will need to customize it.
 1. for ESPHome CLI, you will do this in a text file on your computer.
-2. for ESPHome Device Builder, you will do within the Device Builder editor in Home Assistant UI.
+2. for ESPHome Device Builder, you will do this within the Device Builder editor of the Home Assistant UI.
 
 Minimally, you need to fill out this section of the YAML file.  By default, ESPHome looks in a file called `secrets.yaml` for them.
 
@@ -136,7 +137,7 @@ mqtt:
 
 ### 6. Compile and Flash:
 
-Whether you use the ESPHome CLI or the Device Builder, the first time you flash you will need to do this with a USB to TTL Adapter.  After that, you will be given the option to flash over wifi, which is much faster.
+Whether you use the ESPHome CLI or the Device Builder, the first time you flash you will need to do this with a USB to TTL Adapter.  After that, you will be given the option to flash over Wi-Fi, which is much faster.
 
 **Reminder:** triple check your wiring, making sure you are not connecting +5V to anything other than pin 6.  You can now plug it into your computer and the Vue device should power up and start working as normal.  ESPHome will flash it when it comes time.
 
@@ -144,7 +145,7 @@ You would do **ONE** of these steps depending on which [ESPHome Install method](
 
 #### A) For ESPHome CLI:
 
-You **do not need** to clone this git repo.  Even though this project has custom code in it (Python and C++), ESPHome will download the latest custom code from this project automatically from GitHub as part of the compilation step.  Assuming you called this file `vue-utility-simple.yaml` from the previous step, you would run:
+You **do not need to clone this git repo**.  Even though this project has custom code in it (Python and C++), ESPHome will download the latest custom code from this project automatically from GitHub as part of the compilation step.  Assuming you called this file `vue-utility-simple.yaml` from the previous step, you would run:
 
 ```
 esphome run vue-utility-simple.yaml
@@ -162,8 +163,10 @@ This should build the firmware and flash the device all on the command line.
 - Click `Install`.
 
 This should build the firmware and flash the device all within the web browser:
-- ESPHome uses WebSerial (a browser API supported in Chrome/Edge).  ESPHome compiles the firmware on your HA server, streams it over WebSerial and flashes the Vue on your computer.
-- To be clear: if Home Assistant is running on a Raspberry Pi in a closet, you will have the USB to TTL Adapter connected to your computer, not the Raspberry Pi.
+- ESPHome compiles the firmware on your HA server.
+- ESPHome can flash the Vue over USB when it is either:
+  - connected to the HA server, or
+  - connected to your computer (using WebSerial)
 
 
 ----
@@ -172,15 +175,17 @@ This should build the firmware and flash the device all within the web browser:
 
 Install the [ESPHome Integration](https://www.home-assistant.io/integrations/esphome) in Home Assistant.  You can you do this ahead of time of course.
 
+----
+
 That's it.
 
 If everything works, Home Assistant will detect the Vue and automatically create a device and associated sensor entites.  You should be able to read your energy usage immediately.  See [Basics Explained](docs/basics.md) for what that looks like.
 
 #### Bonus:
 
-Set up the [Energy Module](https://www.home-assistant.io/home-energy-management/) in Home Assistant.  Just go to the `Energy configuration` page and:
- - add the `Utility Watt-hours Consumed` to `Grid consumption`
- - add the `Utility Watt-hours Produced` to `Returned to Grid`
+Set up the [Energy Dashboard](https://www.home-assistant.io/home-energy-management/) in Home Assistant.  Just go to the `Energy configuration` page and:
+ - add `Utility Watt-hours Consumed` to `Grid consumption`
+ - add `Utility Watt-hours Produced` to `Returned to Grid`
 
 <br>
 
@@ -225,7 +230,7 @@ Got Questions?  Check out the [Frequently Asked Questions](docs/faq.md).  Then h
 There are three LEDs on the device, which have "power", "wifi" and "link" icons stenciled on the case.
 
 - **Power** = An ESPHome status led. Slowly flashing means warning, quickly flashing means error, solid on means OK. See [status_led](https://esphome.io/components/status_led.html) docs.
-- **Wifi** = Normally solid on, will briefly flash each time a meter rejoin is attempted which indicates poor signal from the meter.
+- **Wi-Fi** = Normally solid on, will briefly flash each time a meter rejoin is attempted which indicates poor signal from the meter.
 - **Link** = Flashes off briefly about once every 5 seconds. More specifically, the LED turns off when a reading from the meter is requested and turns back on when a response is received. If no response is received then the LED will remain off. If this LED is never turning on then no readings are being returned by the meter.
 
 ## More Details

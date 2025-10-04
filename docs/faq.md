@@ -26,7 +26,7 @@ Later, if you want to customize, see the [section on YAML configuration](yaml.md
 
 ### 4. I'm getting intermittent drop outs.  What do I check?
 
-- First: **swap the USB power supply**.  We have seen a number of the Emporia supply USB power supplies fail, which started out like this and the device failing.
+- First: **swap the USB power supply**.  We have seen a number of the Emporia USB power supplies fail, which started out like this.
 - You may need to move the device closer to your power meter.
 - You may need to contact your utililty and ask them to reprovision the device.
 
@@ -38,13 +38,17 @@ Looks like this in the YAML:
 ```
 api:
   encryption:
-    key: "blah"
+    key: "M3d8zXcnwM4Uo2fRybLjFUNVs+mnlC1XbEfnlvUNI2c="
 ```
 
 - Just a security measure.  It’s a shared secret between your device and Home Assistant.
 - Ensures all ESPHome API traffic (state updates, commands, etc.) is encrypted and authenticated.
 - Without it, someone on your LAN could spoof commands to the device.
-- ESPHome generates one if you don’t set it yourself.
+- To generate one manually:
+
+```
+python3 -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+```
 
 ---
 
@@ -52,9 +56,8 @@ api:
 
 Looks like this in the YAML:
 ```
-api:
-  encryption:
-    key: "blah"
+ota:
+  password: "blah"
 ```
 - Just a security measure.  It’s a shared secret between your device and Home Assistant.
 - Used only when flashing new firmware over Wi-Fi (OTA updates).

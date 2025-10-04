@@ -9,7 +9,7 @@ The example YAMLs should work out of the box, provided you fill in the necessary
 ### Examples
 
 - The [Web Server](https://esphome.io/components/web_server/) component adds a browser-accessible web UI with sensors and logs. Neat, but it duplicates functionality already in Home Assistant, and consumes a lot of memory on the device. If you won’t use it, disable it.
-- The [WiFi Signal Strength](https://esphome.io/components/sensor/wifi_signal/) component creates a sensor in HA showing the devices Wi-Fi strength.  You can also see this is the device logs.  Handy for troubleshooting, but once the connection is stable you may not need an extra entity cluttering HA.
+- The [WiFi Signal Strength](https://esphome.io/components/sensor/wifi_signal/) component creates a sensor in HA showing the devices Wi-Fi strength.  You can also see this in the device logs.  Handy for troubleshooting but once the connection is stable, you may not need an extra entity cluttering HA.
 - The [Uptime Sensor](https://esphome.io/components/sensor/uptime/?utm_source=chatgpt.com) reports how long the device has been running since the last reboot. Handy for debugging stability (e.g. “is my device randomly restarting?”). But if you don’t actively monitor it, it’s more HA clutter.
 - [MQTT](https://esphome.io/components/mqtt/) is a powerful but more complex alternative to HA’s native ESPHome API.  It is essential for some setups, but if you don’t already use MQTT, you can remove it.
 

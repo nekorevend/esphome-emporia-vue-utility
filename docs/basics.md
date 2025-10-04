@@ -28,7 +28,7 @@ The ESPHome Integration is quite magical.  Once your device is flashed and runni
 
 ![ESPHome integration](esphome_screenshot.png)
 
-### Energy module
-You can add the cumulative sensors **Watt-hours Consumed** and **Watt-hours Produced** Home Assistant’s [Energy module](https://www.home-assistant.io/home-energy-management/). This provides a polished and feature-rich view of your energy usage and production.
+### Energy dashboard
+You can add the cumulative sensors **Watt-hours Consumed** and **Watt-hours Produced** to Home Assistant’s [Energy dashboard](https://www.home-assistant.io/home-energy-management/). This provides a polished and feature-rich view of your energy usage and production.
 
-![Energy module](energy_screenshot.png)
+![Energy dashboard](energy_screenshot.png)
