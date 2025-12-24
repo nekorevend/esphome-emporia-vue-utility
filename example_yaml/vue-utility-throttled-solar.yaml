@@ -15,19 +15,27 @@ external_components:
     type: git
     url: https://github.com/nekorevend/esphome-emporia-vue-utility
 
+# Enable Home Assistant API
+api:
+  # Encrypt the API communication with the given key.  Must be a 32-byte base64-encoded string.  See FAQ.
+  encryption:
+    key: "eU79n2aex33uRofF9yvNIP5gwEFCi5GsVi2Rr3OydjY="
+
+# Secures OTA Updates.
+ota:
+  platform: esphome
+  # Any password will work.  See FAQ.
+  password: "some_password"
+
 # Add your own wifi credentials
 wifi:
     ssid: !secret wifi_ssid
     password: !secret wifi_password
 
-ota:
-
 logger:
     logs:
         # Change to DEBUG / INFO / WARN / ERROR as desired
         Vue: DEBUG
-
-api:
 
 mqtt:
     broker: !secret mqtt_broker

@@ -15,14 +15,15 @@ external_components:
 logger:
 
 # Enable Home Assistant API
-# Encryption secures it.  Any password will work.  See FAQ.
 api:
+  # Encrypt the API communication with the given key.  Must be a 32-byte base64-encoded string.  See FAQ.
   encryption:
-    key: "some_password"
+    key: "eU79n2aex33uRofF9yvNIP5gwEFCi5GsVi2Rr3OydjY="
 
-# Secures OTA Updates.  Any password will work.  See FAQ.
+# Secures OTA Updates.
 ota:
   platform: esphome
+  # Any password will work.  See FAQ.
   password: "some_password"
 
 wifi:
