@@ -128,6 +128,10 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   uint16_t pos = 0;
   uint16_t data_len;
 
+  // Buffer for accumulating MGM log messages
+  char log_buf_[1024];
+  uint16_t log_pos_ = 0;
+
   using steady_time_point = std::chrono::time_point<std::chrono::steady_clock>;
   static constexpr steady_time_point min_steady_time_point =
     steady_time_point::min();
@@ -229,44 +233,49 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       pos++;
 
       switch (prev_pos) {
-        case 0:
+        case 0: {
           if (c != 0x24) {  // 0x24 == "$", the start of a message
-            ESP_LOGE(TAG, "Invalid input at position %d: 0x%x", pos, c);
-            dump_serial_input(true);
+            append_log(c);
             pos = 0;
-            return 0;
+            continue;
           }
           break;
-        case 1:
+        }
+        case 1: {
           if (c != 0x01) {  // 0x01 means "response"
-            ESP_LOGE(TAG, "Invalid input at position %d 0x%x", pos, c);
-            dump_serial_input(true);
-            pos = 0;
-            return 0;
+            append_log(c);
+            // Check if this byte is itself a new sync
+            pos = (c == 0x24) ? 1 : 0;
+            if (pos == 1) input_buffer.data[0] = c;
+            continue;
           }
           break;
-        case 2:
+        }
+        case 2: {
           // This is the message type byte
           break;
-        case 3:
+        }
+        case 3: {
           // The 3rd byte should be the data length
           data_len = c;
           break;
-        case sizeof(input_buffer.data) - 1:
+        }
+        case sizeof(input_buffer.data) - 1: {
           ESP_LOGE(TAG, "Buffer overrun");
-          dump_serial_input(true);
+          pos = 0;
           return 0;
-        default:
+        }
+        default: {
           if (pos < data_len + 5) {
-            ;
-          } else if (c == 0x0d) {  // 0x0d == "/r", which should end a message
+            // Still accumulating payload
+          } else if (c == 0x0d) {  // 0x0d == "\r", which should end a message
             return pos;
           } else {
-            ESP_LOGE(TAG, "Invalid terminator at pos %d 0x%x", pos, c);
-            ESP_LOGE(TAG, "Following char is 0x%x", read());
-            dump_serial_input(true);
+            ESP_LOGE(TAG, "Invalid terminator at pos %d: %02x", pos, (uint8_t)c);
+            pos = 0;
             return 0;
           }
+        }
       }
     }  // while(available())
 
@@ -780,6 +789,50 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       while (available()) read();
       delay(100);
     }
+  }
+
+  void send_loglevel(uint8_t level) {
+    char cmd[16];
+    snprintf(cmd, sizeof(cmd), "loglevel %d\r", level);
+    ESP_LOGI(TAG, "Sending: %s", cmd);
+    write_str(cmd);
+    flush();
+  }
+
+  void append_log(uint8_t c) {
+    if (log_pos_ < sizeof(log_buf_) - 1) {
+      log_buf_[log_pos_++] = c;
+    }
+    // Check for \r\n ending and flush
+    if (log_pos_ >= 2 &&
+        log_buf_[log_pos_ - 2] == '\r' &&
+        log_buf_[log_pos_ - 1] == '\n') {
+      flush_log();
+    }
+  }
+
+  void flush_log() {
+    // Trim trailing \r\n
+    while (log_pos_ > 0 && (log_buf_[log_pos_ - 1] == '\r' || log_buf_[log_pos_ - 1] == '\n')) {
+      log_pos_--;
+    }
+    if (log_pos_ > 0) {
+      // Build sanitized output with hex for non-printables
+      // Worst case: every char becomes "[XX]" = 4x expansion
+      char out_buf[4096];
+      uint16_t out_pos = 0;
+      for (uint16_t i = 0; i < log_pos_ && out_pos < sizeof(out_buf) - 5; i++) {
+        char c = log_buf_[i];
+        if (c >= 0x20 && c <= 0x7e) {
+          out_buf[out_pos++] = c;
+        } else {
+          out_pos += snprintf(out_buf + out_pos, sizeof(out_buf) - out_pos, "[%02X]", (uint8_t)c);
+        }
+      }
+      out_buf[out_pos] = '\0';
+      ESP_LOGI(TAG, "MGM: %s", out_buf);
+    }
+    log_pos_ = 0;
   }
 
  private:
