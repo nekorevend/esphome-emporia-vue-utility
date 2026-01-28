@@ -13,6 +13,7 @@ void EmporiaVueUtility::setup() {
   led_link(false);
   led_wifi(false);
   clear_serial_input();
+  send_loglevel(debug_ ? 20 : 10); // Enables MGM111's debug logs as well.
 }
 
 void EmporiaVueUtility::update() {
