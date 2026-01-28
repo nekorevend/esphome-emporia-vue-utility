@@ -817,8 +817,20 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       log_pos_--;
     }
     if (log_pos_ > 0) {
-      log_buf_[log_pos_] = '\0';
-      ESP_LOGI(TAG, "MGM: %s", log_buf_);
+      // Build sanitized output with hex for non-printables
+      // Worst case: every char becomes "[XX]" = 4x expansion
+      char out_buf[4096];
+      uint16_t out_pos = 0;
+      for (uint16_t i = 0; i < log_pos_ && out_pos < sizeof(out_buf) - 5; i++) {
+        char c = log_buf_[i];
+        if (c >= 0x20 && c <= 0x7e) {
+          out_buf[out_pos++] = c;
+        } else {
+          out_pos += snprintf(out_buf + out_pos, sizeof(out_buf) - out_pos, "[%02X]", (uint8_t)c);
+        }
+      }
+      out_buf[out_pos] = '\0';
+      ESP_LOGI(TAG, "MGM: %s", out_buf);
     }
     log_pos_ = 0;
   }
