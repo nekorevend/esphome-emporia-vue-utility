@@ -18,7 +18,7 @@ The example YAMLs should work out of the box, provided you fill in the necessary
 
 ### Sensors
 
-This Vue sensor component provides **6** output values and takes **3** configuration options.
+This Vue sensor component provides **6** output values and takes **4** configuration options.
 
 A full configuration can look like this:
 
@@ -36,6 +36,7 @@ sensor:
     uart_id: emporia_uart
     debug: true
     update_interval: 15s
+    polling_enabled: true
     power:
       name: '${name} Watts'
     power_export:
@@ -89,6 +90,36 @@ sensor:
   - platform: emporia_vue_utility
     update_interval: 15s
     ...
+```
+
+#### Disabling the built-in polling timer
+
+By default, the component uses ESPHome's `PollingComponent` timer to request meter readings at the `update_interval` rate. The built-in timer starts when the device boots, so readings land at arbitrary times relative to the clock.
+
+If you monitor power from multiple systems — inverters, utility meters, CTs, etc. — their readings will each arrive at different offsets, making it harder to get a coherent snapshot of live power flow at any given moment. By polling all of them on wall-clock boundaries (e.g. `:00`, `:10`, `:20`, ...) you can loosely align their readings so that values arriving in the same window actually represent the same approximate time.
+
+To do this, disable the built-in timer with `polling_enabled: false` and use ESPHome's `on_time` to trigger `component.update` on a cron schedule instead. This requires a time source — either the [Home Assistant time component](https://esphome.io/components/time/homeassistant) or [SNTP](https://esphome.io/components/time/sntp) — so the device knows what wall-clock time it is.
+
+When disabled, the component calls `stop_poller()` at startup so the internal timer never fires. The `update()` method still works normally, so you can trigger it externally via `component.update`.
+
+Note that `update_interval` must still be set to a reasonable value (under 40 seconds) even when `polling_enabled` is `false`, because the component uses `update_interval / 4` internally for duplicate reading detection. Setting it too high can cause readings to be silently rejected.
+
+Example using `on_time` for wall-clock aligned 10-second polling:
+
+```yaml
+sensor:
+  - platform: emporia_vue_utility
+    id: vue_sensor
+    polling_enabled: false
+    update_interval: 11s
+    ...
+
+time:
+  - platform: homeassistant
+    on_time:
+      - seconds: /10
+        then:
+          - component.update: vue_sensor
 ```
 
 #### Debug logs

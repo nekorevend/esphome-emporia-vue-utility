@@ -148,6 +148,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   uint16_t cost_unit = 0;
 
   void set_debug(bool enable) { debug_ = enable; }
+  void set_polling_enabled(bool enable) { polling_enabled_ = enable; }
   void set_update_interval(uint32_t update_interval) {
     PollingComponent::set_update_interval(update_interval);
     update_interval_ = std::chrono::milliseconds(update_interval);
@@ -837,6 +838,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
 
  private:
   bool debug_ = false;
+  bool polling_enabled_ = true;
   steady_clock::duration update_interval_;
   sensor::Sensor *power_sensor_{nullptr};
   sensor::Sensor *power_export_sensor_{nullptr};

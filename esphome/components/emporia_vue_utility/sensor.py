@@ -58,6 +58,7 @@ CONFIG_SCHEMA = cv.All(
                 for name in ENERGY_SENSOR_TYPES
             },
             cv.Optional(CONF_DEBUG, default=False): cv.boolean,
+            cv.Optional("polling_enabled", default=True): cv.boolean,
         }
     )
     .extend(cv.polling_component_schema("30s"))
@@ -77,3 +78,5 @@ async def to_code(config):
 
     if CONF_DEBUG in config:
         cg.add(var.set_debug(config[CONF_DEBUG]))
+
+    cg.add(var.set_polling_enabled(config["polling_enabled"]))
