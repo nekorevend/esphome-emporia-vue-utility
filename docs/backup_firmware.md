@@ -14,16 +14,16 @@ Reminder: triple check your wiring, making sure you are not connecting +5V to an
 
 Note: the `esptool` command is used here, which comes installed with the ESPHome CLI.
 ```
-# esptool --port <usb_port> --chip esp32 -b 115200 read_flash 0x0 0x400000 <filename>
+# esptool --port <usb_port> --chip esp32 -b 115200 read-flash 0x0 0x400000 <filename>
 ```
 
 Examples:
 ```
 (on Windows)
-# esptool --port COM3 --chip esp32 -b 115200 read_flash 0x0 0x400000 vue_original_firmare.bin
+# esptool --port COM3 --chip esp32 -b 115200 read-flash 0x0 0x400000 vue_original_firmare.bin
 
 (on a Mac)
-# esptool --port /dev/tty.usbserial-BG01UJXF --chip esp32 -b 115200 read_flash 0x0 0x400000 vue_original_firmare.bin
+# esptool --port /dev/tty.usbserial-BG01UJXF --chip esp32 -b 115200 read-flash 0x0 0x400000 vue_original_firmare.bin
 ```
 
 Reminder: if it doesn't work, swap pins 1 and 2.
@@ -31,5 +31,5 @@ Reminder: if it doesn't work, swap pins 1 and 2.
 **3. If you need to restore:**
 
 ```
-# esptool --port <usb_port> --chip esp32 -b 115200 write_flash --flash_freq 80m 0x0 <filename>
+# esptool --port <usb_port> --chip esp32 -b 115200 write-flash --flash-freq 80m 0x0 <filename>
 ```
