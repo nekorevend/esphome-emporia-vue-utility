@@ -47,8 +47,10 @@ void EmporiaVueUtility::loop() {
         if (now < (last_meter_reading + update_interval_ / 4)) {
           // Sometimes a duplicate message is sent in quick succession.
           // Ignoring the duplicate.
-          ESP_LOGD(TAG, "Got extra message %lds after the previous message.",
-                   now - last_meter_reading);
+          ESP_LOGD(TAG, "Got extra message %lldms after the previous message.",
+                   (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now - last_meter_reading)
+                       .count());
           break;
         }
         last_reading_has_error = 0;
