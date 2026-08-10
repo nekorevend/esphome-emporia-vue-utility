@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cinttypes>
 
 #include "driver/gpio.h"
 
@@ -376,9 +377,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       if ((debug_) || (last_meter_reading == min_steady_time_point)) {
         ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
         ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
-        ESP_LOGD(TAG, "Meter Energy Import Flags: %08x", mr7->import_wh);
-        ESP_LOGD(TAG, "Meter Energy Export Flags: %08x", mr7->export_wh);
-        ESP_LOGD(TAG, "Meter Power Flags: %08x", mr7->watts);
+        ESP_LOGD(TAG, "Meter Energy Import Flags: %08" PRIx32, mr7->import_wh);
+        ESP_LOGD(TAG, "Meter Energy Export Flags: %08" PRIx32, mr7->export_wh);
+        ESP_LOGD(TAG, "Meter Power Flags: %08" PRIx32, mr7->watts);
         ESP_LOGD(TAG, "Meter Import Energy: %.3fkWh", mr7->import_wh / 1000.0);
         ESP_LOGD(TAG, "Meter Export Energy: %.3fkWh", mr7->export_wh / 1000.0);
         ESP_LOGD(TAG, "Meter Net Energy: %.3fkWh", watt_hours / 1000.0);
