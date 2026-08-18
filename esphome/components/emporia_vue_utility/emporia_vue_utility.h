@@ -25,6 +25,11 @@
 // How many samples to average the watt-hours value over.
 #define MAX_WH_CHANGE_ARY 5
 
+// After this many consecutive rejected readings, assume the meter's cumulative
+// baseline genuinely changed (outage, reboot, or counter rollover) and re-sync
+// the moving-average filter to the current reading instead of ignoring it.
+#define MAX_WH_REJECTS MAX_WH_CHANGE_ARY
+
 // How often to attempt to re-join the meter when it hasn't
 // been returning readings
 #define METER_REJOIN_INTERVAL std::chrono::seconds(30)
@@ -530,60 +535,80 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   }
 
   float parse_meter_watt_hours_v7(struct MeterReadingV7 *mr) {
-    uint32_t consumed;
-    uint32_t returned;
-    static uint32_t prev_consumed;
-    static uint32_t prev_returned;
-    int32_t net = 0;
+    static float consumed_history[MAX_WH_CHANGE_ARY];
+    static float returned_history[MAX_WH_CHANGE_ARY];
+    static uint8_t history_pos;
+    static bool filter_seeded;
+    static uint8_t consecutive_rejects;
 
-    consumed = apply_watt_adjustment(mr->import_wh, meter_div, cost_unit);
-    returned = apply_watt_adjustment(mr->export_wh, meter_div, cost_unit);
-    int32_t consumed_diff = int32_t(consumed) - int32_t(prev_consumed);
-    int32_t returned_diff = int32_t(returned) - int32_t(prev_returned);
+    float consumed = apply_watt_adjustment(mr->import_wh, meter_div, cost_unit);
+    float returned = apply_watt_adjustment(mr->export_wh, meter_div, cost_unit);
 
-    // Sometimes the reported value is far larger than it should be. Let's
-    // ignore it.
-    if (std::abs(consumed_diff) > MAX_WH_CHANGE ||
-        std::abs(returned_diff) > MAX_WH_CHANGE) {
-      ESP_LOGW(TAG,
-               "Reported watt-hour change is too large vs previous reading. "
-               "Skipping.");
-      // The `prev_consumed` and `prev_returned` will still be given the current
-      // reading even if the value is erroneous.
-      //
-      // This approach should handle two scenarios:
-      // 1) Some sort of outage causes a long gap between the previous reading
-      // (or is 0 after a reboot) and the current reading. In this case, the
-      // difference from the previous reading can be "too" large, but actually
-      // be expected.
-      // 2) I have seen erroneous blips of a single sample with a value that is
-      // way too big.
-      //
-      // The code handles scenario #1 by ignoring the current reading but then
-      // continuing on as normal after. The code handles scenario #2 by ignoring
-      // the current reading, then ignoring the followup reading, then
-      // continuing on as normal.
-      //
-      // At worst, two consecutive samples will be ignored.
-      prev_consumed = consumed;
-      prev_returned = returned;
-      return (0);
+    if (!filter_seeded) {
+      for (int x = 0; x < MAX_WH_CHANGE_ARY; x++) {
+        consumed_history[x] = consumed;
+        returned_history[x] = returned;
+      }
+      filter_seeded = 1;
     }
 
-    net = consumed - returned;
+    float consumed_avg = 0;
+    float returned_avg = 0;
+    for (int x = 0; x < MAX_WH_CHANGE_ARY; x++) {
+      consumed_avg += consumed_history[x] / MAX_WH_CHANGE_ARY;
+      returned_avg += returned_history[x] / MAX_WH_CHANGE_ARY;
+    }
+
+    // Sometimes the reported value is far larger than it should be. Validate the
+    // new reading against the moving average before storing it, so a spike
+    // never poisons the window.
+    if (std::abs(consumed - consumed_avg) > MAX_WH_CHANGE ||
+        std::abs(returned - returned_avg) > MAX_WH_CHANGE) {
+      consecutive_rejects++;
+      ESP_LOGW(TAG,
+               "Reported watt-hours too large vs moving average "
+               "(consumed %.0f vs avg %.0f, returned %.0f vs avg %.0f). "
+               "Skipping (%d/%d).",
+               consumed, consumed_avg, returned, returned_avg,
+               consecutive_rejects, MAX_WH_REJECTS);
+      // This handles two scenarios:
+      // 1) An outage/reboot/counter rollover causes a genuine step change in the
+      //    baseline. After MAX_WH_REJECTS consecutive rejects we assume this is
+      //    real and re-sync the filter to the new level.
+      // 2) Transient erroneous blips: a run of up to MAX_WH_REJECTS - 1
+      //    consecutive bad samples. Each is ignored and never stored, so the
+      //    window stays clean and the counter resets the moment a good sample
+      //    returns, at which point it is accepted immediately.
+      if (consecutive_rejects < MAX_WH_REJECTS) {
+        return (0);
+      }
+      ESP_LOGW(TAG, "Re-baselining energy filter to new level");
+      for (int x = 0; x < MAX_WH_CHANGE_ARY; x++) {
+        consumed_history[x] = consumed;
+        returned_history[x] = returned;
+      }
+    }
+    consecutive_rejects = 0;
+
+    // Accept: advance the ring buffer with the new reading
+    history_pos++;
+    if (history_pos == MAX_WH_CHANGE_ARY) {
+      history_pos = 0;
+    }
+    consumed_history[history_pos] = consumed;
+    returned_history[history_pos] = returned;
+
+    float net = consumed - returned;
 
     if (energy_import_sensor_ != nullptr) {
-      energy_import_sensor_->publish_state(float(consumed));
+      energy_import_sensor_->publish_state(consumed);
     }
     if (energy_export_sensor_ != nullptr) {
-      energy_export_sensor_->publish_state(float(returned));
+      energy_export_sensor_->publish_state(returned);
     }
     if (energy_sensor_ != nullptr) {
       energy_sensor_->publish_state(net);
     }
-
-    prev_consumed = consumed;
-    prev_returned = returned;
 
     return (net);
   }
