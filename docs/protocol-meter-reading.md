@@ -19,8 +19,8 @@ Blank cells have never been seen to be anything other than zero.  Note the table
   <tr>   <th>0</th> <td colspan=4></td></tr>
   <tr>   <th>4</th> <td colspan=4 align="center">EnergyVal</td></tr>
   <tr>   <th>...</th> <td colspan=4></td></tr>
-  <tr>   <th>44</th> <td colspan=3></td><td align="center">MeterDiv</td></tr>
-  <tr>   <th>48</th> <td colspan=2></td><td colspan=2 align="center">EnergyCostUnit</td></tr>
+  <tr>   <th>44</th> <td colspan=3></td><td align="center">Multiplier</td></tr>
+  <tr>   <th>48</th> <td colspan=2></td><td colspan=2 align="center">Divisor</td></tr>
   <tr>   <th>52</th> <td colspan=2 align="center">Unknown 1</td><td colspan=2></td></tr>
   <tr>   <th>56</th> <td></td><td colspan=3 align="center">PowerVal</td></tr>
   <tr>   <th>...</th> <td colspan=4></td></tr>
@@ -38,21 +38,21 @@ might reset monthly or on start of new billing cycle.
 
 Sometimes, an invalid number greater than `0x00400000` is returned, it is not understood when or why this happens.
 
-#### MeterDiv
+#### Multiplier
 
 At least byte 47, maybe as large as bytes 44 to 47
 
-Some meters report values not in watts and watt hours but in a multiple of those values.  `EnergyVal` and `PowerVal` should 
-be divided by `MeterDiv` to determine the real value.  Usually this is 1, but have also seen a value of 3.
+Usually 1, but a value of 3 has been seen.
 
-#### EnergyCostUnit
+Used when calculating `EnergyVal` and `PowerVal`, where the real value is `raw * Multiplier / Divisor`.
+
+#### Divisor
 
 Bytes 50 and 51 MSB(?)
 
-Usually `0x03E8`, which is 1000.  Theorized to be how many `EvergyVal` units per "cost unit" (a value we don't appear to have).
-Since people are typically charged per kWh, this value is typically 1000.
+Usually 1000.
 
-This value is not currently used in the code
+Used when calculating `EnergyVal` and `PowerVal`, where the real value is `raw * Multiplier / Divisor`.
 
 #### PowerVal
 

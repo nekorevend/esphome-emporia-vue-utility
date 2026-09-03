@@ -67,9 +67,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     uint8_t unknown0[4];     // Payload Bytes 0 to 3
     uint32_t watt_hours;  // Payload Bytes 4 to 7
     uint8_t unknown8[39];    // Payload Bytes 8 to 46
-    uint8_t meter_div;    // Payload Byte  47
+    uint8_t meter_multiplier;  // Payload Byte  47
     uint8_t unknown48[2];    // Payload Bytes 48 to 49
-    uint16_t cost_unit;   // Payload Bytes 50 to 51
+    uint16_t meter_divisor;   // Payload Bytes 50 to 51
     uint8_t maybe_flags[2];  // Payload Bytes 52 to 53
     uint8_t unknown54[2];    // Payload Bytes 54 to 55
     uint32_t watts;       // Payload Bytes 56 to 59
@@ -124,11 +124,13 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   bool last_reading_has_error;
   steady_time_point now;
 
-  // The most recent meter divisor, meter reading payload V2 byte 47
-  uint8_t meter_div = 0;
+  // The most recent ZCL Metering Multiplier (V2 payload byte 47). Formerly
+  // called meter_div. Both Multiplier and Divisor are uint24 in ZCL, so they
+  // are held in uint32_t to avoid truncating larger values.
+  uint32_t meter_multiplier = 0;
 
-  // The most recent cost unit
-  uint16_t cost_unit = 0;
+  // The most recent ZCL Metering Divisor. Formerly called cost_unit.
+  uint32_t meter_divisor = 0;
 
   void set_debug(bool enable) { debug_ = enable; }
   void set_polling_enabled(bool enable) { polling_enabled_ = enable; }
@@ -275,9 +277,10 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     return x;
   }
 
-  float apply_watt_adjustment(int64_t input, uint8_t meter_div,
-                              uint16_t cost_unit) {
-    return ((float)input * (float)meter_div) / ((float)cost_unit / 1000.0);
+  float apply_watt_adjustment(int64_t input, uint32_t meter_multiplier,
+                              uint32_t meter_divisor) {
+    return ((float)input * (float)meter_multiplier) /
+           ((float)meter_divisor / 1000.0);
   }
 
   void handle_resp_meter_reading() {
@@ -296,12 +299,12 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
         return;
       }
 
-      // Setup Meter Divisor
-      meter_div = parse_meter_div(mr2->meter_div);
+      // Setup Multiplier
+      meter_multiplier = parse_multiplier(mr2->meter_multiplier);
 
-      // Setup Cost Unit
-      cost_unit =
-          ((mr2->cost_unit & 0x00FF) << 8) + ((mr2->cost_unit & 0xFF00) >> 8);
+      // Setup Divisor (stored big-endian in the V2 payload)
+      meter_divisor = ((mr2->meter_divisor & 0x00FF) << 8) +
+                      ((mr2->meter_divisor & 0xFF00) >> 8);
 
       watt_hours = parse_meter_watt_hours_v2(mr2);
       watts = parse_meter_watts_v2(mr2->watts);
@@ -309,8 +312,8 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       // Extra debugging of non-zero bytes, only on first packet or if
       // debug_ is true
       if ((debug_) || (last_meter_reading == min_steady_time_point)) {
-        ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
-        ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
+        ESP_LOGD(TAG, "Meter Multiplier: %" PRIu32, meter_multiplier);
+        ESP_LOGD(TAG, "Meter Divisor: %" PRIu32, meter_divisor);
         ESP_LOGD(TAG, "Meter Flags: %02x %02x", mr2->maybe_flags[0],
                  mr2->maybe_flags[1]);
         ESP_LOGD(TAG, "Meter Energy Flags: %02x", (uint8_t)mr2->watt_hours);
@@ -360,8 +363,8 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
         return;
       }
 
-      meter_div = parse_meter_div(reading.multiplier);
-      cost_unit = reading.divisor;
+      meter_multiplier = parse_multiplier(reading.multiplier);
+      meter_divisor = reading.divisor;
 
       if (reading.watts_present) {
         watts = parse_meter_watts_v7(reading.watts);
@@ -374,8 +377,8 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       // Extra debugging of non-zero bytes, only on first packet or if
       // debug_ is true
       if ((debug_) || (last_meter_reading == min_steady_time_point)) {
-        ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
-        ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
+        ESP_LOGD(TAG, "Meter Multiplier: %" PRIu32, meter_multiplier);
+        ESP_LOGD(TAG, "Meter Divisor: %" PRIu32, meter_divisor);
         ESP_LOGD(TAG, "Meter Import Energy: %.3fkWh", reading.import_wh / 1000.0);
         if (reading.export_present) {
           ESP_LOGD(TAG, "Meter Export Energy: %.3fkWh",
@@ -423,19 +426,20 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     ESP_LOGE(TAG, "EOF");
   }
 
-  uint8_t parse_meter_div(uint8_t new_meter_div) {
-    uint8_t div = new_meter_div;
-    if ((new_meter_div > 10) || (new_meter_div < 1)) {
-      ESP_LOGW(TAG, "Unreasonable MeterDiv value %d, ignoring", new_meter_div);
+  uint32_t parse_multiplier(uint32_t new_multiplier) {
+    uint32_t mult = new_multiplier;
+    if ((new_multiplier > 10) || (new_multiplier < 1)) {
+      ESP_LOGW(TAG, "Unreasonable Multiplier value %" PRIu32 ", ignoring",
+               new_multiplier);
       last_reading_has_error = 1;
       ask_for_bug_report();
-    } else if ((meter_div != 0) && (new_meter_div != meter_div)) {
-      ESP_LOGW(TAG, "MeterDiv value changed from %d to %d", meter_div,
-               new_meter_div);
+    } else if ((meter_multiplier != 0) && (new_multiplier != meter_multiplier)) {
+      ESP_LOGW(TAG, "Multiplier value changed from %" PRIu32 " to %" PRIu32,
+               meter_multiplier, new_multiplier);
       last_reading_has_error = 1;
-      div = new_meter_div;
+      mult = new_multiplier;
     }
-    return div;
+    return mult;
   }
 
   float parse_meter_watt_hours_v2(struct MeterReadingV2 *mr) {
@@ -464,8 +468,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       return (0);
     }
 
-    // Handle if a meter divisor is in effect
-    watt_hours = apply_watt_adjustment(watt_hours_raw, meter_div, cost_unit);
+    // Handle if a meter multiplier/divisor is in effect
+    watt_hours =
+        apply_watt_adjustment(watt_hours_raw, meter_multiplier, meter_divisor);
 
     if (!not_first_run) {
       // Initialize watt-hour filter on first run
@@ -645,7 +650,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     }
 
     // Handle the adjustment.
-    watts = apply_watt_adjustment(watts_24bit, meter_div, cost_unit);
+    watts = apply_watt_adjustment(watts_24bit, meter_multiplier, meter_divisor);
 
     if ((watts >= WATTS_MAX) || (watts < WATTS_MIN)) {
       ESP_LOGE(TAG, "Unreasonable watts value %f", watts);

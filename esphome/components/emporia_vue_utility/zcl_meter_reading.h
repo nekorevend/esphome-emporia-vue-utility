@@ -102,10 +102,10 @@ struct ParsedV7Reading {
   double watts = 0;  // watts
 
   bool multiplier_present = false;
-  uint8_t multiplier = 0;  // raw ZCL Multiplier
+  uint32_t multiplier = 0;  // raw ZCL Multiplier (uint24)
 
   bool divisor_present = false;
-  uint16_t divisor = 0;  // raw ZCL Divisor
+  uint32_t divisor = 0;  // raw ZCL Divisor (uint24)
 
   // Net energy = import - export.  When export is absent it counts as zero, so
   // net collapses to import.
@@ -186,11 +186,11 @@ inline ParsedV7Reading parse_v7_zcl(const uint8_t *payload, size_t len) {
         break;
       case ATTR_MULTIPLIER:
         r.multiplier_present = true;
-        r.multiplier = uint8_t(uval);
+        r.multiplier = uint32_t(uval);
         break;
       case ATTR_DIVISOR:
         r.divisor_present = true;
-        r.divisor = uint16_t(uval);
+        r.divisor = uint32_t(uval);
         break;
       case ATTR_INSTANTANEOUS_DEMAND:
         demand_present = true;

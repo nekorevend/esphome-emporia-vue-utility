@@ -129,11 +129,8 @@ Add `debug: true` if you need to see additional details about issues you're expe
 When enabled, each reading will cause the log to output something like this:
 
 ```
-[00:05:17][D][emporia_vue_utility:360]: Meter Cost Unit: 1000
-[00:05:17][D][emporia_vue_utility:361]: Meter Divisor: 1
-[00:05:17][D][emporia_vue_utility:362]: Meter Energy Import Flags: 00596680
-[00:05:17][D][emporia_vue_utility:363]: Meter Energy Export Flags: 0078f478
-[00:05:17][D][emporia_vue_utility:364]: Meter Power Flags: 00038d2a
+[00:05:17][D][emporia_vue_utility:377]: Meter Multiplier: 1
+[00:05:17][D][emporia_vue_utility:378]: Meter Divisor: 1000
 [00:05:17][D][emporia_vue_utility:365]: Meter Import Energy: 5858.944kWh
 [00:05:17][D][emporia_vue_utility:366]: Meter Export Energy: 7926.904kWh
 [00:05:17][D][emporia_vue_utility:367]: Meter Net Energy: -2067.960kWh
