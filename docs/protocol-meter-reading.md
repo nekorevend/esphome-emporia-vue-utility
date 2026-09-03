@@ -19,8 +19,8 @@ Blank cells have never been seen to be anything other than zero.  Note the table
   <tr>   <th>0</th> <td colspan=4></td></tr>
   <tr>   <th>4</th> <td colspan=4 align="center">EnergyVal</td></tr>
   <tr>   <th>...</th> <td colspan=4></td></tr>
-  <tr>   <th>44</th> <td colspan=3></td><td align="center">MeterDiv</td></tr>
-  <tr>   <th>48</th> <td colspan=2></td><td colspan=2 align="center">EnergyCostUnit</td></tr>
+  <tr>   <th>44</th> <td colspan=3></td><td align="center">Multiplier</td></tr>
+  <tr>   <th>48</th> <td colspan=2></td><td colspan=2 align="center">Divisor</td></tr>
   <tr>   <th>52</th> <td colspan=2 align="center">Unknown 1</td><td colspan=2></td></tr>
   <tr>   <th>56</th> <td></td><td colspan=3 align="center">PowerVal</td></tr>
   <tr>   <th>...</th> <td colspan=4></td></tr>
@@ -38,21 +38,21 @@ might reset monthly or on start of new billing cycle.
 
 Sometimes, an invalid number greater than `0x00400000` is returned, it is not understood when or why this happens.
 
-#### MeterDiv
+#### Multiplier
 
 At least byte 47, maybe as large as bytes 44 to 47
 
-Some meters report values not in watts and watt hours but in a multiple of those values.  `EnergyVal` and `PowerVal` should 
-be divided by `MeterDiv` to determine the real value.  Usually this is 1, but have also seen a value of 3.
+Usually 1, but a value of 3 has been seen.
 
-#### EnergyCostUnit
+Used when calculating `EnergyVal` and `PowerVal`, where the real value is `raw * Multiplier / Divisor`.
+
+#### Divisor
 
 Bytes 50 and 51 MSB(?)
 
-Usually `0x03E8`, which is 1000.  Theorized to be how many `EvergyVal` units per "cost unit" (a value we don't appear to have).
-Since people are typically charged per kWh, this value is typically 1000.
+Usually 1000.
 
-This value is not currently used in the code
+Used when calculating `EnergyVal` and `PowerVal`, where the real value is `raw * Multiplier / Divisor`.
 
 #### PowerVal
 
@@ -86,66 +86,128 @@ Random uneducated guess is that this is a bit field with flags about the meter c
 
 ## Payload for Version 7
 
-The meter reading response contains 44 bytes of payload, most of which seem to always be zeros. The table below details the payload format that's been reversed engineered so far.
-Blank cells have never been seen to be anything other than zero. Some cells have hex codes that I have never seen change, but might differ for you. Note the table is zero-indexed (starts at byte zero, not byte 1).
+Unlike V2, the V7+ payload is not a proprietary blob. It is a standard
+Zigbee Cluster Library (ZCL)
+**Read Attributes Response** frame for the **Simple Metering cluster (`0x0702`)**. Rather than reading fields
+at fixed byte offsets, we can parse the payload generically as a sequence of ZCL
+attribute records. That way, we can handle when attributes are missing or out of order (see
+[Variable length](#variable-length-and-missing-attributes) below).
 
-<table  style="width:80%">
-  <tr>   <td></td>
-            <th align="center"><img width="50" height="1">0<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">1<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">2<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">3<img width="50" height="1"></th>
-  </tr>
-  <tr>   <th>0</th> <td colspan=1 align="center">0x18</td><td colspan=1 align="center">Incrementor</td><td colspan=1 align="center">0x01</td><td colspan=1></tr>
-  <tr>   <th>4</th> <td colspan=2></td><td colspan=1 align="center">0x25</td><td colspan=1 align="center">ImportWh~</td></tr>
-  <tr>   <th>8</th> <td colspan=3 align="center">~ImportWh</td><td colspan=1></td></tr>
-  <tr>   <th>12</th> <td colspan=1></td><td colspan=1 align="center">0x01</td><td colspan=2></td></tr>
-  <tr>   <th>16</th> <td colspan=1 align="center">0x25</td><td colspan=3 align="center">ExportWh~</td></tr>
-  <tr>   <th>20</th> <td colspan=1 align="center">~ExportWh</td><td colspan=2></td><td colspan=1 align="center">0x01</td></tr>
-  <tr>   <th>24</th> <td colspan=1 align="center">0x03</td><td colspan=1></td><td colspan=1 align="center">0x22</td><td colspan=1 align="center">MeterDiv</td></tr>
-  <tr>   <th>28</th> <td colspan=2></td><td colspan=1 align="center">0x02</td><td colspan=1 align="center">0x03</td></tr>
-  <tr>   <th>32</th> <td colspan=1></td><td colspan=1 align="center">0x22</td><td colspan=2 align="center">EnergyCostUnit</td></tr>
-  <tr>   <th>36</th> <td colspan=1></td><td colspan=1></td><td colspan=1 align="center">0x04</td><td colspan=1></td></tr>
-  <tr>   <th>40</th> <td colspan=1 align="center">0x2A</td><td colspan=3 align="center">PowerVal</td></tr>
-</table>
+### ZCL frame structure
 
-### Known Fields
+```
+Payload
+├── Byte 0        Frame Control            (0x18)
+├── Byte 1        Transaction Seq Number   (the "incrementor"; +1 each reading, rolls over)
+├── Byte 2        Command ID               (0x01 = Read Attributes Response)
+└── Byte 3...     One or more Read-Attribute-Status Records
+```
 
-#### ImportWh
+Each **Read-Attribute-Status Record** is:
 
-Bytes 7 to 10, (32 bit int, probably unsigned, LSB)
+| Field | Size | Notes |
+|---|---|---|
+| Attribute Identifier | 2 bytes, LSB | e.g. `0x0000` |
+| Status | 1 byte | `0x00` = SUCCESS. Any other value (e.g. `0x86` UNSUPPORTED_ATTRIBUTE) means the record **ends here** — no type or value follows. |
+| Attribute Data Type | 1 byte | Only present when status is SUCCESS. ZCL type tag, see below. |
+| Attribute Value | *N* bytes, LSB | Only present when status is SUCCESS. *N* is determined by the data type. |
 
-Cumulative watt-hours consumed from the grid. Unknown when the value resets, but probably never resets since ESP32 never sends a clock sync to the MGM111 so it likely just rolls over.
+### ZCL data type tags seen in practice
 
-#### ExportWh
+| Tag | Type | Value size |
+|---|---|---|
+| `0x22` | uint24 | 3 bytes |
+| `0x25` | uint48 | 6 bytes |
+| `0x2A` | int24 (signed) | 3 bytes |
 
-Bytes 17 to 20, (32 bit int, probably unsigned, LSB)
+### Known Attributes (Simple Metering cluster `0x0702`)
 
-Cumulative watt-hours sent to the grid. Unknown when the value resets, but probably never resets since ESP32 never sends a clock sync to the MGM111 so it likely just rolls over.
+#### CurrentSummationDelivered (Attribute `0x0000`)
 
-#### MeterDiv
+Format: uint48, LSB
 
-Byte 27
+We will call this ImportWh.
 
-Used in conjunction with `EnergyCostUnit` and `PowerVal` to calculate the actual wattage.
+Cumulative watt-hours consumed from the grid. Unknown when the value resets, but probably
+never resets since the ESP32 never sends a clock sync to the MGM111, so it likely just
+rolls over.
 
-#### EnergyCostUnit
+#### CurrentSummationReceived (Attribute `0x0001`)
 
-Bytes 34 and 35 LSB
+Format: uint48, LSB
 
-Usually `0xE803`, which is `0x03E8` = `1000`. Continuing the V2 theorization that this is the number of watt-hour units per "cost unit".
-Since people are typically charged per kWh, this value is typically 1000.
+We will call this ExportWh.
 
-#### PowerVal
+Cumulative watt-hours sent to the grid. On meters without export/solar this attribute is
+potentially reported with status `0x86` (UNSUPPORTED_ATTRIBUTE) and carries no value — see
+[Variable length](#variable-length-and-missing-attributes).
 
-Bytes 41 and 43 (24 bit signed int, LSB)
+#### Multiplier (Attribute `0x0301`)
 
-The power being sent or consumed at this moment. The actual wattage is calculated with the formula:
+Format: uint24, LSB
 
-`Watts = PowerVal * MeterDiv / (EnergyCostUnit / 1000)`
+The ZCL Metering *Multiplier*. Combined with the *Divisor* to convert raw summation/demand
+values into watts / watt-hours.
 
-#### Incrementor
+#### Divisor (Attribute `0x0302`)
 
-Byte 1 (8 bit unsigned int)
+Format: uint24, LSB
 
-This just increments by 1 on each reading and rolls over.
+The ZCL Metering *Divisor*. Usually `1000` (bytes `E8 03 00`).
+
+#### InstantaneousDemand (Attribute `0x0400`)
+
+Format: int24 signed, LSB
+
+We will call this PowerVal, or simply watts.
+
+The power being sent or consumed at this moment. Negative values indicate export. Per the
+ZCL Metering spec, the actual value is:
+
+`Value = Raw * Multiplier / Divisor`
+
+Typically, the Divisor has a value of `1000` and Multiplier has a value of `1`, meaning the resulting value becomes kilowatts.
+
+However, I am making the decision for this project that the base unit of all values are in watts (or watt-hours) since that is the true base unit (kilo being a modifier). Therefore, I am turning `Divisor` into `1` by doing `Divisor / 1000`.
+
+
+
+### Example: a fully-populated reading
+
+An example 44-byte payload with every attribute present, decoded field by field. Byte
+offsets are zero-indexed and specific to this example. Their offsets will shift whenever an attribute is
+missing (see [Variable length](#variable-length-and-missing-attributes) below).
+
+Raw payload:
+
+```
+18 34 01 00 00 00 25 7A 91 55 01 00 00 01 00 00 25 33 68 63 01 00 00 01 03 00 22 01 00 00 02 03 00 22 E8 03 00 00 04 00 2A A7 04 00
+```
+
+**ZCL header** (bytes 0–2):
+
+| Byte | Field | Value |
+|---|---|---|
+| 0 | Frame Control | `0x18` |
+| 1 | Transaction Sequence Number (Incrementor) | `0x34` |
+| 2 | Command ID | `0x01` (Read Attributes Response) |
+
+**Attribute records** (byte 3 onward) — one row per record:
+
+| Bytes | Attribute ID | Name | Status | Type | Value (LE) | Decoded |
+|---|---|---|---|---|---|---|
+| 3-12 | `0x0000` | CurrentSummationDelivered (ImportWh) | `0x00` OK | `0x25` uint48 | `7A 91 55 01 00 00` | 22,385,018 |
+| 13-22 | `0x0001` | CurrentSummationReceived (ExportWh) | `0x00` OK | `0x25` uint48 | `33 68 63 01 00 00` | 23,291,956 |
+| 23-29 | `0x0301` | Multiplier | `0x00` OK | `0x22` uint24 | `01 00 00` | 1 |
+| 30-36 | `0x0302` | Divisor | `0x00` OK | `0x22` uint24 | `E8 03 00` | 1000 |
+| 37-43 | `0x0400` | InstantaneousDemand (PowerVal) | `0x00` OK | `0x2A` int24 | `A7 04 00` | 1191 |
+
+Each record is `attribute id (2) + status (1) + type (1) + value (N)` bytes, except a
+non-`OK` status record which is just `id (2) + status (1)` with no type or value.
+
+### Variable length and missing attributes
+
+The payload length is **not fixed at 44 bytes**. Any attribute may be reported with a
+non-SUCCESS status (commonly `0x86` UNSUPPORTED_ATTRIBUTE), in which case that record is
+only 3 bytes long (id + status, no type/value) and the overall payload is shorter. A parser
+must therefore walk records bounded by the payload length, not assume a fixed size.
