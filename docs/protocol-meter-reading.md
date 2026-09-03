@@ -147,7 +147,7 @@ potentially reported with status `0x86` (UNSUPPORTED_ATTRIBUTE) and carries no v
 Format: uint24, LSB
 
 The ZCL Metering *Multiplier*. Combined with the *Divisor* to convert raw summation/demand
-values into engineering units.
+values into watts / watt-hours.
 
 #### Divisor (Attribute `0x0302`)
 

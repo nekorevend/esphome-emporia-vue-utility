@@ -9,6 +9,8 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
 
+#include "zcl_meter_reading.h"
+
 // If the instant watts being consumed meter reading is outside of these ranges,
 // the sample will be ignored which helps prevent garbage data from polluting
 // home assistant graphs.  Note this is the instant watts value, not the
@@ -75,30 +77,6 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     uint32_t timestamp;   // Payload Bytes 148 to 152
   };
 
-  /**
-   * Format known from MGM Firmware version 7 and 8.
-   */
-  struct MeterReadingV7 {
-    uint8_t header;
-    uint8_t is_resp;
-    uint8_t msg_type;
-    uint8_t data_len;
-    uint8_t unknown0;     // Payload Byte  0 : Always 0x18
-    uint8_t increment;    // Payload Byte  1 : Increments on each reading and rolls
-                       // over
-    uint8_t unknown2[5];  // Payload Bytes 2 to 6
-    uint32_t import_wh;  // Payload Bytes 7 to 10
-    uint8_t unknown11[6];   // Payload Bytes 11 to 16
-    uint32_t export_wh;  // Payload Bytes 17 to 20
-    uint8_t unknown21[6];   // Payload Bytes 21 to 26
-    uint8_t meter_div;   // Payload Byte  27
-    uint8_t unknown28[6];   // Payload Bytes 28 to 33
-    uint16_t cost_unit;  // Payload Bytes 34 to 35
-    uint8_t unknown36[4];   // Payload Bytes 36 to 39
-    uint32_t watts;  // Payload Bytes 40 to 43 : Starts with 0x2A, only use the
-                     // last 24 bits.
-  } __attribute__((packed));
-
   // A Mac Address or install code response
   struct Addr {
     char header;
@@ -122,7 +100,6 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   union input_buffer {
     uint8_t data[260];  // 4 byte header + 255 bytes payload + 1 byte terminator
     struct MeterReadingV2 mr2;
-    struct MeterReadingV7 mr7;
     struct Addr addr;
     struct Ver ver;
   } input_buffer;
@@ -304,13 +281,10 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   }
 
   void handle_resp_meter_reading() {
-    int32_t input_value;
-    float watt_hours;
-    float watts;
+    float watt_hours = 0;
+    float watts = 0;
     struct MeterReadingV2 *mr2;
     mr2 = &input_buffer.mr2;
-    struct MeterReadingV7 *mr7;
-    mr7 = &input_buffer.mr7;
 
     if (mgm_firmware_ver < 7) {
       ESP_LOGD(TAG, "Parsing V2 Payload");
@@ -360,33 +334,55 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     } else {
       ESP_LOGD(TAG, "Parsing V7+ Payload");
 
-      // Quick validate, look for a magic number.
-      if (input_buffer.data[44] != 0x2A) {
-        ESP_LOGE(TAG, "Byte 44 was %02x instead of %02x", input_buffer.data[44],
-                 0x2A);
+      // The V7+ payload is a ZCL Read Attributes Response for the Simple
+      // Metering cluster (0x0702). Decode it generically (see
+      // zcl_meter_reading.h). The payload begins at input_buffer.data[4] (after
+      // the '$' 0x01 <type> <len> header) and is data_len bytes long.
+      ParsedV7Reading reading = parse_v7_zcl(&input_buffer.data[4], data_len);
+
+      if (!reading.ok) {
+        ESP_LOGE(TAG, "Failed to parse V7+ ZCL meter reading");
         last_reading_has_error = 1;
         return;
       }
 
-      // Setup Meter Divisor
-      meter_div = parse_meter_div(mr7->meter_div);
+      // The Multiplier and Divisor are required to scale the readings, and real
+      // meters send them in every reading. Their absence means a malformed
+      // payload, not a value we should assume.
+      if (!reading.multiplier_present) {
+        ESP_LOGE(TAG, "Meter reading missing Multiplier attribute (0x0301)");
+        last_reading_has_error = 1;
+        return;
+      }
+      if (!reading.divisor_present) {
+        ESP_LOGE(TAG, "Meter reading missing Divisor attribute (0x0302)");
+        last_reading_has_error = 1;
+        return;
+      }
 
-      // Setup Cost Unit
-      cost_unit = mr7->cost_unit;
+      meter_div = parse_meter_div(reading.multiplier);
+      cost_unit = reading.divisor;
 
-      watts = parse_meter_watts_v7(mr7->watts);
-      watt_hours = parse_meter_watt_hours_v7(mr7);
+      if (reading.watts_present) {
+        watts = parse_meter_watts_v7(reading.watts);
+      }
+      if (reading.import_present) {
+        watt_hours = parse_meter_watt_hours_v7(
+            reading.import_wh, reading.export_wh, reading.export_present);
+      }
 
       // Extra debugging of non-zero bytes, only on first packet or if
       // debug_ is true
       if ((debug_) || (last_meter_reading == min_steady_time_point)) {
         ESP_LOGD(TAG, "Meter Cost Unit: %d", cost_unit);
         ESP_LOGD(TAG, "Meter Divisor: %d", meter_div);
-        ESP_LOGD(TAG, "Meter Energy Import Flags: %08" PRIx32, mr7->import_wh);
-        ESP_LOGD(TAG, "Meter Energy Export Flags: %08" PRIx32, mr7->export_wh);
-        ESP_LOGD(TAG, "Meter Power Flags: %08" PRIx32, mr7->watts);
-        ESP_LOGD(TAG, "Meter Import Energy: %.3fkWh", mr7->import_wh / 1000.0);
-        ESP_LOGD(TAG, "Meter Export Energy: %.3fkWh", mr7->export_wh / 1000.0);
+        ESP_LOGD(TAG, "Meter Import Energy: %.3fkWh", reading.import_wh / 1000.0);
+        if (reading.export_present) {
+          ESP_LOGD(TAG, "Meter Export Energy: %.3fkWh",
+                   reading.export_wh / 1000.0);
+        } else {
+          ESP_LOGD(TAG, "Meter Export Energy: not reported");
+        }
         ESP_LOGD(TAG, "Meter Net Energy: %.3fkWh", watt_hours / 1000.0);
         ESP_LOGD(TAG, "Meter Power:  %3.0fW", watts);
 
@@ -534,15 +530,17 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     return (watt_hours);
   }
 
-  float parse_meter_watt_hours_v7(struct MeterReadingV7 *mr) {
+  // consumed / returned are already in watt-hours, decoded by parse_v7_zcl().
+  // export_present is false when the meter did not report the
+  // export summation (e.g. no solar), in which case returned is 0 and the export
+  // sensor is left unpublished.
+  float parse_meter_watt_hours_v7(double consumed, double returned,
+                                  bool export_present) {
     static float consumed_history[MAX_WH_CHANGE_ARY];
     static float returned_history[MAX_WH_CHANGE_ARY];
     static uint8_t history_pos;
     static bool filter_seeded;
     static uint8_t consecutive_rejects;
-
-    float consumed = apply_watt_adjustment(mr->import_wh, meter_div, cost_unit);
-    float returned = apply_watt_adjustment(mr->export_wh, meter_div, cost_unit);
 
     if (!filter_seeded) {
       for (int x = 0; x < MAX_WH_CHANGE_ARY; x++) {
@@ -603,7 +601,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
     if (energy_import_sensor_ != nullptr) {
       energy_import_sensor_->publish_state(consumed);
     }
-    if (energy_export_sensor_ != nullptr) {
+    if (export_present && energy_export_sensor_ != nullptr) {
       energy_export_sensor_->publish_state(returned);
     }
     if (energy_sensor_ != nullptr) {
@@ -676,16 +674,12 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   }
 
   /*
-   * Read the instant watts value.
+   * Validate and publish the instant watts value.
    *
-   * For MGM version 7 and 8
+   * For MGM version 7 and 8. `watts` is already in watts, decoded from the
+   * signed int24 InstantaneousDemand attribute by parse_v7_zcl().
    */
-  float parse_meter_watts_v7(int32_t watts_raw) {
-    // Read the instant watts value
-    // (it's actually a 24-bit int)
-    watts_raw >>= 8;
-    float watts = apply_watt_adjustment(watts_raw, meter_div, cost_unit);
-
+  float parse_meter_watts_v7(float watts) {
     if ((watts >= WATTS_MAX) || (watts < WATTS_MIN)) {
       ESP_LOGE(TAG, "Unreasonable watts value %f", watts);
       last_reading_has_error = 1;
