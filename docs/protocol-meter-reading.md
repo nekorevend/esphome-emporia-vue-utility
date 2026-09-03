@@ -172,31 +172,38 @@ However, I am making the decision for this project that the base unit of all val
 
 
 
-### Byte layout of a fully-populated reading
+### Example: a fully-populated reading
 
-The table below shows a reading where every attribute is present (44 bytes). Zero-indexed.
-`FC`/`Incrementor`/`Command` are the ZCL header; `attr`/`status`/`type` are each record's attribute id / status
-/ type tag.
+An example 44-byte payload with every attribute present, decoded field by field. Byte
+offsets are zero-indexed and specific to this example. Their offsets will shift whenever an attribute is
+missing (see [Variable length](#variable-length-and-missing-attributes) below).
 
-<table  style="width:80%">
-  <tr>   <td></td>
-            <th align="center"><img width="50" height="1">0<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">1<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">2<img width="50" height="1"></th>
-            <th align="center"><img width="50" height="1">3<img width="50" height="1"></th>
-  </tr>
-  <tr>   <th>0</th> <td colspan=1 align="center">0x18 FC</td><td colspan=1 align="center">Incrementor</td><td colspan=1 align="center">0x01 Command</td><td colspan=1 align="center">attr 0x00~</td></tr>
-  <tr>   <th>4</th> <td colspan=1 align="center">~attr 0x00</td><td colspan=1 align="center">status</td><td colspan=1 align="center">type 0x25</td><td colspan=1 align="center">ImportWh~</td></tr>
-  <tr>   <th>8</th> <td colspan=4 align="center">~ImportWh~</td></tr>
-  <tr>   <th>12</th> <td colspan=1 align="center">~ImportWh</td><td colspan=2 align="center">attr 0x0001</td><td colspan=1 align="center">status</td></tr>
-  <tr>   <th>16</th> <td colspan=1 align="center">type 0x25</td><td colspan=3 align="center">ExportWh~</td></tr>
-  <tr>   <th>20</th> <td colspan=3 align="center">~ExportWh</td><td colspan=1 align="center">attr 0x03~</td></tr>
-  <tr>   <th>24</th> <td colspan=1 align="center">~attr 0x01</td><td colspan=1 align="center">status</td><td colspan=1 align="center">type 0x22</td><td colspan=1 align="center">Multiplier~</td></tr>
-  <tr>   <th>28</th> <td colspan=2 align="center">~Multiplier</td><td colspan=2 align="center">attr 0x0302</td></tr>
-  <tr>   <th>32</th> <td colspan=1 align="center">status</td><td colspan=1 align="center">type 0x22</td><td colspan=2 align="center">Divisor~</td></tr>
-  <tr>   <th>36</th> <td colspan=1 align="center">~Divisor</td><td colspan=2 align="center">attr 0x0400</td><td colspan=1 align="center">status</td></tr>
-  <tr>   <th>40</th> <td colspan=1 align="center">type 0x2A</td><td colspan=3 align="center">PowerVal</td></tr>
-</table>
+Raw payload:
+
+```
+18 34 01 00 00 00 25 7A 91 55 01 00 00 01 00 00 25 33 68 63 01 00 00 01 03 00 22 01 00 00 02 03 00 22 E8 03 00 00 04 00 2A A7 04 00
+```
+
+**ZCL header** (bytes 0–2):
+
+| Byte | Field | Value |
+|---|---|---|
+| 0 | Frame Control | `0x18` |
+| 1 | Transaction Sequence Number (Incrementor) | `0x34` |
+| 2 | Command ID | `0x01` (Read Attributes Response) |
+
+**Attribute records** (byte 3 onward) — one row per record:
+
+| Bytes | Attribute ID | Name | Status | Type | Value (LE) | Decoded |
+|---|---|---|---|---|---|---|
+| 3-12 | `0x0000` | CurrentSummationDelivered (ImportWh) | `0x00` OK | `0x25` uint48 | `7A 91 55 01 00 00` | 22,385,018 |
+| 13-22 | `0x0001` | CurrentSummationReceived (ExportWh) | `0x00` OK | `0x25` uint48 | `33 68 63 01 00 00` | 23,291,956 |
+| 23-29 | `0x0301` | Multiplier | `0x00` OK | `0x22` uint24 | `01 00 00` | 1 |
+| 30-36 | `0x0302` | Divisor | `0x00` OK | `0x22` uint24 | `E8 03 00` | 1000 |
+| 37-43 | `0x0400` | InstantaneousDemand (PowerVal) | `0x00` OK | `0x2A` int24 | `A7 04 00` | 1191 |
+
+Each record is `attribute id (2) + status (1) + type (1) + value (N)` bytes, except a
+non-`OK` status record which is just `id (2) + status (1)` with no type or value.
 
 ### Variable length and missing attributes
 
