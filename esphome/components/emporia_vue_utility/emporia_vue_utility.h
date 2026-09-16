@@ -432,7 +432,6 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       ESP_LOGW(TAG, "Unreasonable Multiplier value %" PRIu32 ", ignoring",
                new_multiplier);
       last_reading_has_error = 1;
-      ask_for_bug_report();
     } else if ((meter_multiplier != 0) && (new_multiplier != meter_multiplier)) {
       ESP_LOGW(TAG, "Multiplier value changed from %" PRIu32 " to %" PRIu32,
                meter_multiplier, new_multiplier);
