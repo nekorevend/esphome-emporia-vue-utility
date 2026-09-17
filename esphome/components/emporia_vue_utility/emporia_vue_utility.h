@@ -32,6 +32,11 @@
 // the moving-average filter to the current reading instead of ignoring it.
 #define MAX_WH_REJECTS MAX_WH_CHANGE_ARY
 
+// After this many consecutive unscaled (zero Multiplier/Divisor) readings with
+// no usable reading in between, stop silently ignoring them and ask for a bug
+// report.
+#define MAX_UNSCALED_READINGS 3
+
 // How often to attempt to re-join the meter when it hasn't
 // been returning readings
 #define METER_REJOIN_INTERVAL std::chrono::seconds(30)
@@ -123,6 +128,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
   steady_time_point last_meter_reading = min_steady_time_point;
   bool last_reading_has_error;
   steady_time_point now;
+
+  // Consecutive unscaled V7+ readings since the last scaled one.
+  uint8_t unscaled_reading_count = 0;
 
   // The most recent ZCL Metering Multiplier (V2 payload byte 47). Formerly
   // called meter_div. Both Multiplier and Divisor are uint24 in ZCL, so they
@@ -283,7 +291,9 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
            ((float)meter_divisor / 1000.0);
   }
 
-  void handle_resp_meter_reading() {
+  // Returns false if the reading was ignored (neither used nor an error), so
+  // the caller doesn't count it as the latest meter reading.
+  bool handle_resp_meter_reading() {
     float watt_hours = 0;
     float watts = 0;
     struct MeterReadingV2 *mr2;
@@ -296,7 +306,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       if (pos < sizeof(struct MeterReadingV2)) {
         ESP_LOGE(TAG, "Short meter reading packet");
         last_reading_has_error = 1;
-        return;
+        return true;
       }
 
       // Setup Multiplier
@@ -346,7 +356,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       if (!reading.ok) {
         ESP_LOGE(TAG, "Failed to parse V7+ ZCL meter reading");
         last_reading_has_error = 1;
-        return;
+        return true;
       }
 
       // The Multiplier and Divisor are required to scale the readings, and real
@@ -355,13 +365,31 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
       if (!reading.multiplier_present) {
         ESP_LOGE(TAG, "Meter reading missing Multiplier attribute (0x0301)");
         last_reading_has_error = 1;
-        return;
+        return true;
       }
       if (!reading.divisor_present) {
         ESP_LOGE(TAG, "Meter reading missing Divisor attribute (0x0302)");
         last_reading_has_error = 1;
-        return;
+        return true;
       }
+
+      // Some meters reply to a request with an all-zero reading before the real
+      // one. Skip it without treating it as an error, unless that's all the
+      // meter ever sends.
+      if (reading.is_unscaled()) {
+        unscaled_reading_count++;
+        if (unscaled_reading_count < MAX_UNSCALED_READINGS) {
+          ESP_LOGD(TAG, "Meter reading has zero Multiplier/Divisor, ignoring");
+          return false;
+        }
+        ESP_LOGE(TAG,
+                 "Got %d consecutive readings with zero Multiplier/Divisor",
+                 unscaled_reading_count);
+        unscaled_reading_count = 0;
+        last_reading_has_error = 1;
+        return true;
+      }
+      unscaled_reading_count = 0;
 
       meter_multiplier = parse_multiplier(reading.multiplier);
       meter_divisor = reading.divisor;
@@ -401,6 +429,7 @@ class EmporiaVueUtility : public PollingComponent, public uart::UARTDevice {
         }
       }
     }
+    return true;
   }
 
   void ask_for_bug_report() {

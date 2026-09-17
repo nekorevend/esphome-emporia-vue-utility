@@ -54,8 +54,10 @@ void EmporiaVueUtility::loop() {
           break;
         }
         last_reading_has_error = 0;
-        handle_resp_meter_reading();
-        if (last_reading_has_error) {
+        if (!handle_resp_meter_reading()) {
+          // Ignored reading: don't count it, so the real reading that follows
+          // isn't dropped as a duplicate.
+        } else if (last_reading_has_error) {
           ask_for_bug_report();
         } else {
           last_meter_reading = now;
