@@ -112,6 +112,14 @@ struct ParsedV7Reading {
   double net_wh() const {
     return import_wh - (export_present ? export_wh : 0.0);
   }
+
+  // True when the meter reports a zero Multiplier or Divisor.  Some meters send
+  // such a reading (with every other value also 0) ahead of the real one.  It
+  // cannot be scaled, so it carries no usable data and should be ignored.
+  bool is_unscaled() const {
+    return multiplier_present && divisor_present &&
+           (multiplier == 0 || divisor == 0);
+  }
 };
 
 // Decode a ZCL Read Attributes Response payload (starting at the ZCL Frame

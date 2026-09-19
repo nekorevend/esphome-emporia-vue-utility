@@ -48,6 +48,7 @@ TEST_CASE("full 44-byte frame: import, export, and demand all present") {
   CHECK(r.net_wh() == doctest::Approx(-906938));
   CHECK(r.multiplier == 1);
   CHECK(r.divisor == 1000);
+  CHECK_FALSE(r.is_unscaled());
 }
 
 TEST_CASE("37-byte frame: export unsupported (status 0x86), shorter payload") {
@@ -69,6 +70,29 @@ TEST_CASE("37-byte frame: export unsupported (status 0x86), shorter payload") {
   CHECK(r.net_wh() == doctest::Approx(318458));  // export treated as 0
   CHECK(r.multiplier == 1);
   CHECK(r.divisor == 1000);
+  CHECK_FALSE(r.is_unscaled());
+}
+
+TEST_CASE("all-zero frame: every attribute present but 0 => unscaled") {
+  // Some meters send this ahead of the real reading. Structurally valid, but
+  // the zero Multiplier/Divisor means it carries no usable data.
+  const std::vector<uint8_t> frame = {
+      0x18, 0x1A, 0x01,                                            // ZCL header
+      0x00, 0x00, 0x00, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // import
+      0x01, 0x00, 0x00, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // export
+      0x01, 0x03, 0x00, 0x22, 0x00, 0x00, 0x00,                    // multiplier
+      0x02, 0x03, 0x00, 0x22, 0x00, 0x00, 0x00,                    // divisor
+      0x00, 0x04, 0x00, 0x2A, 0x00, 0x00, 0x00};                   // demand
+
+  ParsedV7Reading r = decode(frame);
+
+  CHECK(r.ok);
+  CHECK(r.import_present);
+  CHECK(r.export_present);
+  CHECK(r.watts_present);
+  CHECK(r.multiplier_present);
+  CHECK(r.divisor_present);
+  CHECK(r.is_unscaled());
 }
 
 TEST_CASE("defensive: truncated frame (value overruns) => not ok") {
@@ -124,6 +148,8 @@ TEST_CASE("missing Multiplier/Divisor: parses, but values are left unscaled") {
   CHECK(r.watts_present);
   CHECK(r.import_wh == doctest::Approx(0));  // unscaled: no Multiplier/Divisor
   CHECK(r.watts == doctest::Approx(0));
+  // Missing attributes are an error, not an ignorable unscaled reading.
+  CHECK_FALSE(r.is_unscaled());
 }
 
 TEST_CASE("zcl_type_len covers the metering types and rejects unknowns") {
